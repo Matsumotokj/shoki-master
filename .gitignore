@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# 環境変数
+.env
+
+# SAM
+.aws-sam/
+samconfig.toml
+
+# Node / フロントエンド
+node_modules/
+dist/
+
+# OS / エディタ
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
