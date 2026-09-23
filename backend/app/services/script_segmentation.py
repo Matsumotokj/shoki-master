@@ -77,14 +77,18 @@ def parse_mark_name(name: str) -> int | None:
     return int(suffix) if suffix.isdigit() else None
 
 
-def build_ssml(sentences: list[str]) -> str:
+def build_ssml(sentences: list[str], break_ms: int = 0) -> str:
     """文のリストから、各文の先頭に <mark> を置いた SSML を組み立てる。
 
     題材は LLM の生成物なので、& や < がそのまま含まれると SSML が壊れる。
     必ずエスケープしてから埋め込む。
+
+    break_ms を指定すると文の間に明示的な無音を入れる。句点区切りモードで
+    文の終わりに停止したとき、余韻が無いまま切れるのを避けるためのもの。
     """
-    body = "".join(
-        f'<mark name="{mark_name(i)}"/>{escape(sentence)}'
-        for i, sentence in enumerate(sentences)
-    )
-    return f"<speak>{body}</speak>"
+    parts: list[str] = []
+    for i, sentence in enumerate(sentences):
+        if i > 0 and break_ms > 0:
+            parts.append(f'<break time="{break_ms}ms"/>')
+        parts.append(f'<mark name="{mark_name(i)}"/>{escape(sentence)}')
+    return f"<speak>{''.join(parts)}</speak>"

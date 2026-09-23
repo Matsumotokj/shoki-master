@@ -121,6 +121,27 @@ class TestBuildSsml:
     def test_empty_list_produces_valid_ssml(self):
         assert build_ssml([]) == "<speak></speak>"
 
+    def test_break_is_inserted_between_sentences(self):
+        ssml = build_ssml(["一つ目。", "二つ目。", "三つ目。"], break_ms=350)
+        assert ssml.count('<break time="350ms"/>') == 2
+
+    def test_break_is_not_inserted_before_the_first_sentence(self):
+        ssml = build_ssml(["一つ目。", "二つ目。"], break_ms=350)
+        assert not ssml.startswith('<speak><break')
+
+    def test_no_break_by_default(self):
+        assert "<break" not in build_ssml(["一つ目。", "二つ目。"])
+
+    def test_break_zero_inserts_nothing(self):
+        assert "<break" not in build_ssml(["一つ目。", "二つ目。"], break_ms=0)
+
+    def test_ssml_with_break_is_parseable(self):
+        from xml.etree import ElementTree
+
+        root = ElementTree.fromstring(build_ssml(["一つ目。", "二つ目。"], break_ms=350))
+        assert [m.get("name") for m in root.findall("mark")] == ["s0", "s1"]
+        assert [b.get("time") for b in root.findall("break")] == ["350ms"]
+
     def test_is_parseable_xml(self):
         from xml.etree import ElementTree
 
