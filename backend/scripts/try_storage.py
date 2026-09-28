@@ -1,7 +1,8 @@
-"""手作業で作った一時リソースに対して、repositories のコードを実際に動かす。
+"""SAM で作ったリソースに対して、repositories のコードを実際に動かす。
 
 課金は 1 円未満（DynamoDB の読み書き数十回と、S3 への 1 回の書き込み）。
-U8 で SAM がリソースを作るまでの動作確認用で、リソースの名前は環境変数で差し替える。
+書き込んだ題材・回答・音声は TTL とライフサイクルで 1 日後に消える。
+リソースの名前は環境変数で差し替えられる（既定は shoki-master スタックの名前）。
 
 使い方:
     python scripts/try_storage.py
@@ -12,13 +13,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# 一時リソースを指す。本番のリソース名は U8 で SAM が決め、同じ環境変数で渡す。
-os.environ.setdefault("PROBLEMS_TABLE", "problems_tmp")
-os.environ.setdefault("ATTEMPTS_TABLE", "attempts_tmp")
-os.environ.setdefault("COUNTERS_TABLE", "counters_tmp")
-os.environ.setdefault(
-    "AUDIO_BUCKET", "shoki-master-audio-tmp-843232832210-ap-northeast-1-an"
-)
+# テーブル名は config.py の既定値が shoki-master スタックの名前と一致している。
+# バケット名はアカウント ID を含むので、ここで補う（sam deploy の Outputs を参照）。
+os.environ.setdefault("AUDIO_BUCKET", "shoki-master-audio-843232832210-ap-northeast-1-an")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

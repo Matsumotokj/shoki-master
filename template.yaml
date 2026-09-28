@@ -1,0 +1,118 @@
+# 書記マスター（shoki-master）のインフラ定義
+#
+# このファイルが AWS 上のリソースの「正」。コンソールや CLI で直接変更しない
+# （変更するとこのファイルと実物が食い違い、次のデプロイで上書きされるか失敗する）。
+#
+# 現段階は保存先のみ。API（Lambda + API Gateway）と配信（CloudFront）は後で足す。
+#
+#   sam validate --lint     書式の検査
+#   sam deploy              作成・更新（設定は samconfig.toml）
+#   sam delete              スタックごと全部削除
+
+AWSTemplateFormatVersion: "2010-09-09"
+# この 1 行があると SAM の短縮記法（AWS::Serverless::*）が使える。
+# デプロイ時に通常の CloudFormation に展開される。
+Transform: AWS::Serverless-2016-10-31
+Description: 書記マスター - 聞き取り・要約の訓練アプリ
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # 問題（題材・文ごとの開始位置・音声の場所）
+  # アクセスパターン: problem_id を指定して 1 件取る → パーティションキーだけ
+  # ---------------------------------------------------------------------------
+  ProblemsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-problems
+      # キーに使う属性だけを宣言する（text や sentences は書かない）
+      AttributeDefinitions:
+        - AttributeName: problem_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: problem_id
+          KeyType: HASH
+      # オンデマンド。読み書きした分だけ課金、アクセスが無ければ 0
+      BillingMode: PAY_PER_REQUEST
+      # 作成とは別の設定だった TTL。属性名はアプリ（repositories/problems.py）と一致させる
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # ---------------------------------------------------------------------------
+  # 回答（同じ問題に何度でも。要件 F3-4）
+  # アクセスパターン: ある問題への回答を新しい順に取る → PK + SK
+  # ---------------------------------------------------------------------------
+  AttemptsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-attempts
+      AttributeDefinitions:
+        - AttributeName: problem_id
+          AttributeType: S
+        - AttributeName: attempt_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: problem_id
+          KeyType: HASH
+        - AttributeName: attempt_id
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # ---------------------------------------------------------------------------
+  # 作問数のカウンタ（日次・月次の上限。要件 N2-3）
+  # ---------------------------------------------------------------------------
+  CountersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-counters
+      AttributeDefinitions:
+        - AttributeName: counter_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: counter_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # ---------------------------------------------------------------------------
+  # 生成した音声（使い捨て。1 日で自動削除）
+  # ---------------------------------------------------------------------------
+  AudioBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      # アカウントのリージョナル名前空間。CloudFormation が
+      # 「-<アカウントID>-<リージョン>-an」を自動で付ける
+      BucketNamespace: account-regional
+      BucketNamePrefix: !Sub ${AWS::StackName}-audio
+      # 非公開。配信は署名付き URL で行う（要件 N3-2）
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      # バージョニングは付けない。使い捨ての音声に旧版は不要で、
+      # 有効だと削除のたびに版を 1 つずつ消す必要が出る
+      LifecycleConfiguration:
+        Rules:
+          - Id: delete-after-1-day
+            Status: Enabled
+            ExpirationInDays: 1
+
+Outputs:
+  # ローカル開発ではこの値を環境変数に入れて、同じリソースに接続する
+  ProblemsTableName:
+    Value: !Ref ProblemsTable
+  AttemptsTableName:
+    Value: !Ref AttemptsTable
+  CountersTableName:
+    Value: !Ref CountersTable
+  AudioBucketName:
+    Value: !Ref AudioBucket

@@ -10,7 +10,6 @@ __pycache__/
 
 # SAM
 .aws-sam/
-samconfig.toml
 
 # Node / フロントエンド
 node_modules/
