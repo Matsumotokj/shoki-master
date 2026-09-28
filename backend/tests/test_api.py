@@ -7,6 +7,7 @@
 from typing import Any
 
 import pytest
+from botocore.exceptions import ClientError
 from fastapi.testclient import TestClient
 
 from app.dependencies import get_problem_service
@@ -312,6 +313,46 @@ class TestSubmitAnswer:
         response = client.post(f"/api/problems/{problem_id}/answers", json={"user_input": "まとめ"})
         assert response.status_code == 502
         assert fakes.repo.attempts == []
+
+
+# ---------------------------------------------------------------------------
+# 予算超過による停止（Budgets が Bedrock と Polly を拒否するポリシーを付けた状態）
+# ---------------------------------------------------------------------------
+
+
+def access_denied() -> ClientError:
+    return ClientError(
+        {"Error": {"Code": "AccessDeniedException", "Message": "explicit deny"}}, "Converse"
+    )
+
+
+class TestStoppedByBudget:
+    def test_problem_creation_returns_503(self, client, fakes):
+        fakes.llm.error = access_denied()
+        response = create(client)
+        assert response.status_code == 503
+        assert "一時停止" in response.json()["detail"]
+
+    def test_transcription_practice_keeps_working(self, client, fakes):
+        # 文字起こしの採点は AWS を呼ばないので、停止中も作成済みの問題で練習できる
+        problem_id = create(client).json()["problem_id"]
+        fakes.llm.error = access_denied()
+        response = client.post(f"/api/problems/{problem_id}/answers", json={"user_input": SCRIPT})
+        assert response.status_code == 201
+        assert response.json()["transcription"]["accuracy"] == 100
+
+    def test_summary_scoring_returns_503(self, client, fakes):
+        problem_id = create(client, mode="summary").json()["problem_id"]
+        fakes.llm.error = access_denied()
+        response = client.post(f"/api/problems/{problem_id}/answers", json={"user_input": "まとめ"})
+        assert response.status_code == 503
+
+    def test_other_aws_errors_are_500(self, client, fakes):
+        # 権限以外の AWS のエラーは想定外。停止中と誤って案内しない
+        fakes.llm.error = ClientError({"Error": {"Code": "ValidationException"}}, "Converse")
+        response = create(client)
+        assert response.status_code == 500
+        assert "一時停止" not in response.json()["detail"]
 
 
 def test_health(client):

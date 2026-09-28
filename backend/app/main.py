@@ -6,6 +6,7 @@ Lambda  :  app.main.handler           （Mangum が API Gateway のイベント�
 
 import logging
 
+from botocore.exceptions import ClientError
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -79,6 +80,32 @@ def llm_error(request: Request, error: LLMError) -> JSONResponse:
         status_code=502,
         content={"detail": "文章の生成または採点に失敗しました。時間をおいて再度お試しください"},
     )
+
+
+_ACCESS_DENIED_CODES = {"AccessDeniedException", "AccessDenied"}
+
+
+@app.exception_handler(ClientError)
+def aws_client_error(request: Request, error: ClientError) -> JSONResponse:
+    """AWS から「権限がない」と返されたときは、停止中として 503 を返す。
+
+    月の予算を使い切ると、Budgets が実行ロールに Bedrock と Polly を拒否する
+    ポリシーを付ける（要件 N2-3）。その間、作問と要約の採点はここに来る。
+    文字起こしの採点は AWS を呼ばない計算だけなので、止まらずに使える。
+    それ以外の AWS のエラーは想定外なので 500 とし、ログに残す。
+    """
+    code = error.response.get("Error", {}).get("Code", "")
+    if code in _ACCESS_DENIED_CODES:
+        logger.warning("aws access denied", extra={"path": request.url.path, "code": code})
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "作問と要約の採点を一時停止しています（今月の利用上限に達したため）。"
+                "作成済みの問題での文字起こしの練習は引き続き使えます"
+            },
+        )
+    logger.error("aws client error", extra={"path": request.url.path, "code": code}, exc_info=error)
+    return JSONResponse(status_code=500, content={"detail": "内部エラーが発生しました"})
 
 
 # Lambda の入口。lifespan は使っていないので無効にする。

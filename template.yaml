@@ -18,6 +18,14 @@ Transform: AWS::Serverless-2016-10-31
 # 値の中の日本語が CloudFormation に届く前に「?」に化けるため。コメントは影響しない。
 Description: Shoki Master - listening, transcription and summarization practice
 
+Parameters:
+  # 予算（月 $7・通知メール付き）はアカウント全体の費用監視として手作業で作成済み。
+  # 通知先のメールアドレスをリポジトリに載せないため、予算自体はこのテンプレートに入れない
+  BudgetName:
+    Type: String
+    Default: shoki-master-monthly
+    Description: Existing AWS Budgets budget that triggers the stop action
+
 Resources:
   # ---------------------------------------------------------------------------
   # 問題（題材・文ごとの開始位置・音声の場所）
@@ -220,6 +228,113 @@ Resources:
     Properties:
       LogGroupName: !Sub /aws/lambda/${AWS::StackName}-api
       RetentionInDays: 14
+
+  # ===========================================================================
+  # 予算超過時の自動停止（要件 N2-3 の最後の層）
+  #
+  # 予算の実績が 100% に達すると、Budgets が API の実行ロールに下の
+  # 拒否ポリシーを付ける。作問と要約の採点（Bedrock・Polly）が止まり、
+  # 費用のかからない文字起こしの採点だけが動き続ける。
+  #
+  # 翌月になっても自動では外れない。原因を確認してから手動で戻す:
+  #   aws budgets describe-budget-actions-for-budget --account-id <ID> --budget-name <名前>
+  #   aws budgets execute-budget-action ... --execution-type REVERSE_BUDGET_ACTION
+  # ===========================================================================
+
+  # 付けられる側: 費用のかかる呼び出しだけを拒否する。
+  # 拒否（Deny）は許可（Allow）より常に優先されるので、実行ロールの許可を
+  # 書き換えずに、付け外しだけで止めたり戻したりできる
+  StopGenerationPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Attached by AWS Budgets when the monthly budget is exhausted
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: StopPaidAiCalls
+            Effect: Deny
+            Action:
+              - bedrock:InvokeModel
+              - polly:SynthesizeSpeech
+            Resource: "*"
+
+  # 付ける側: Budgets が引き受けるロール。
+  # 「API の実行ロールに、上の拒否ポリシーを付け外しすること」だけを許す
+  BudgetActionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: budgets.amazonaws.com
+            Action: sts:AssumeRole
+            # 他のアカウントの予算からこのロールを使わせない（混乱した代理問題の対策）
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:aws:budgets::${AWS::AccountId}:budget/*
+      Policies:
+        - PolicyName: attach-stop-policy-to-api-role
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                Resource: !GetAtt ApiFunctionRole.Arn
+                # 付け外しできるのは上の拒否ポリシーだけ（管理者権限などは付けられない）
+                Condition:
+                  ArnEquals:
+                    iam:PolicyARN: !Ref StopGenerationPolicy
+
+  # 停止したことの通知先。メールアドレスをリポジトリに載せないため SNS トピックにする。
+  # 予算 100% のメール通知は既存の予算から届く。停止の通知もメールで受けたければ、
+  # このトピックにメールの購読を手作業で 1 回追加する
+  BudgetAlertTopic:
+    Type: AWS::SNS::Topic
+
+  BudgetAlertTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref BudgetAlertTopic
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: budgets.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref BudgetAlertTopic
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  BudgetStopAction:
+    Type: AWS::Budgets::BudgetsAction
+    DependsOn: BudgetAlertTopicPolicy
+    Properties:
+      BudgetName: !Ref BudgetName
+      NotificationType: ACTUAL
+      ActionThreshold:
+        Type: PERCENTAGE
+        Value: 100
+      ActionType: APPLY_IAM_POLICY
+      # 承認を待たずに自動で実行する（夜中に超えても止まるように）
+      ApprovalModel: AUTOMATIC
+      ExecutionRoleArn: !GetAtt BudgetActionRole.Arn
+      Definition:
+        IamActionDefinition:
+          PolicyArn: !Ref StopGenerationPolicy
+          Roles:
+            - !Ref ApiFunctionRole
+      Subscribers:
+        - Type: SNS
+          Address: !Ref BudgetAlertTopic
 
 Outputs:
   ApiUrl:
