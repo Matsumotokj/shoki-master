@@ -286,6 +286,26 @@ class TestSubmitAnswer:
         )
         assert response.status_code == 422
 
+    def test_broken_characters_return_422_not_500(self, client):
+        # UTF-8 として表せない文字（対になっていないサロゲート）が届いた場合。
+        # 標準の 422 応答は入力をそのまま返そうとして 500 になっていた
+        problem_id = create(client).json()["problem_id"]
+        response = client.post(
+            f"/api/problems/{problem_id}/answers",
+            content=b'{"user_input": "\\udc86abc"}',
+            headers={"Content-Type": "application/json"},
+        )
+        assert response.status_code == 422
+
+    def test_validation_errors_do_not_echo_the_input(self, client):
+        # 利用者の入力を応答に書き戻さない
+        problem_id = create(client).json()["problem_id"]
+        secret = "あ" * 2001
+        response = client.post(f"/api/problems/{problem_id}/answers", json={"user_input": secret})
+        assert response.status_code == 422
+        assert secret not in response.text
+        assert response.json()["detail"][0]["loc"] == ["body", "user_input"]
+
     def test_summary_scoring_failure_returns_502(self, client, fakes):
         problem_id = create(client, mode="summary").json()["problem_id"]
         fakes.llm.error = LLMError("boom")

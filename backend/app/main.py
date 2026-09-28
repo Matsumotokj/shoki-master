@@ -7,6 +7,7 @@ Lambda  :  app.main.handler           （Mangum が API Gateway のイベント�
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from mangum import Mangum
 
@@ -36,6 +37,22 @@ def health() -> dict[str, str]:
 # 例外 → HTTP の状態コード
 # サービス層は HTTP を知らない例外を投げ、ここで利用者向けの応答に変換する。
 # ---------------------------------------------------------------------------
+
+
+@app.exception_handler(RequestValidationError)
+def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:
+    """入力の検証に失敗したときの 422。
+
+    FastAPI の標準の応答は、受け取った値（input）をそのまま返す。
+    利用者の入力を応答やログに書き戻すのは避けたいうえ、壊れた文字
+    （UTF-8 として表せない文字）が含まれていると応答を作れずに 500 になる。
+    どの項目がなぜ不正かだけを返す。
+    """
+    details = [
+        {"loc": list(e.get("loc", ())), "msg": e.get("msg", ""), "type": e.get("type", "")}
+        for e in error.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": details})
 
 
 @app.exception_handler(UsageLimitExceeded)

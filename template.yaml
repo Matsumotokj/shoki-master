@@ -3,9 +3,10 @@
 # このファイルが AWS 上のリソースの「正」。コンソールや CLI で直接変更しない
 # （変更するとこのファイルと実物が食い違い、次のデプロイで上書きされるか失敗する）。
 #
-# 現段階は保存先のみ。API（Lambda + API Gateway）と配信（CloudFront）は後で足す。
+# 現段階は保存先と API。配信（CloudFront）は後で足す。
 #
 #   sam validate --lint     書式の検査
+#   sam build               Lambda に載せるコードと依存ライブラリをまとめる（.aws-sam/）
 #   sam deploy              作成・更新（設定は samconfig.toml）
 #   sam delete              スタックごと全部削除
 
@@ -13,7 +14,9 @@ AWSTemplateFormatVersion: "2010-09-09"
 # この 1 行があると SAM の短縮記法（AWS::Serverless::*）が使える。
 # デプロイ時に通常の CloudFormation に展開される。
 Transform: AWS::Serverless-2016-10-31
-Description: 書記マスター - 聞き取り・要約の訓練アプリ
+# 値（Description など）は英語にする。Windows（cp932）から sam deploy すると、
+# 値の中の日本語が CloudFormation に届く前に「?」に化けるため。コメントは影響しない。
+Description: Shoki Master - listening, transcription and summarization practice
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -106,7 +109,123 @@ Resources:
             Status: Enabled
             ExpirationInDays: 1
 
+  # ---------------------------------------------------------------------------
+  # API の入口（API Gateway の HTTP API）
+  # REST API より安く、今回使わない機能（API キー、リクエスト変換など）を持たない
+  # ---------------------------------------------------------------------------
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      # 全ルート共通の流量制限。人が練習する速さには十分で、連打や機械的な
+      # 大量アクセスはここで弾く（要件 N2-3）。超えると 429 が返る
+      DefaultRouteSettings:
+        ThrottlingRateLimit: 2
+        ThrottlingBurstLimit: 5
+
+  # ---------------------------------------------------------------------------
+  # API 本体（FastAPI を 1 つの Lambda に載せる）
+  # ---------------------------------------------------------------------------
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      # backend/ の中身と requirements.txt のライブラリをまとめて載せる
+      CodeUri: backend/
+      Handler: app.main.handler
+      Runtime: python3.14
+      # Graviton（ARM）。同じ性能で x86 より 2 割ほど安い
+      Architectures:
+        - arm64
+      # メモリに比例して CPU も割り当てられる。起動時の import が速くなる
+      MemorySize: 512
+      # HTTP API が待てるのは最大 30 秒。それより先に Lambda 側で打ち切る。
+      # 作問は実測 8.8 秒（271 字）、最悪でも 20 秒程度の見込み
+      Timeout: 29
+      # 同時実行数の予約（ReservedConcurrentExecutions）は設定しない。
+      # アカウントの上限が 10 で、AWS は予約されていない枠を最低 10 残すことを
+      # 求めるため、1 つも予約できない。上限 10 自体が天井として働く
+      Environment:
+        Variables:
+          PROBLEMS_TABLE: !Ref ProblemsTable
+          ATTEMPTS_TABLE: !Ref AttemptsTable
+          COUNTERS_TABLE: !Ref CountersTable
+          AUDIO_BUCKET: !Ref AudioBucket
+      # ログの出力先を下で定義したロググループにする。Lambda に自動で作らせると
+      # スタックの管理外になり、スタックを消しても残る（インターンの後始末で経験）
+      LoggingConfig:
+        LogGroup: !Ref ApiFunctionLogGroup
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            # /api/ 以下だけを Lambda に渡す。/docs（Swagger UI）は公開しない
+            Path: /api/{proxy+}
+            Method: ANY
+      # -----------------------------------------------------------------------
+      # 実行ロール: この Lambda に許す操作。必要なものだけを、対象を絞って許可する
+      # （ログの書き込みは SAM が自動で付ける）
+      # -----------------------------------------------------------------------
+      Policies:
+        - Statement:
+            # 題材生成・要約採点。日本国内完結の推論プロファイルは東京と大阪の
+            # モデルに振り分けるので、プロファイルと両リージョンのモデルを許可する。
+            # 東京だけだと「大阪に振り分けられたときだけ失敗する」不具合になる
+            - Sid: InvokeClaudeInJapan
+              Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/jp.anthropic.claude-haiku-4-5-20251001-v1:0
+                - arn:aws:bedrock:ap-northeast-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0
+                - arn:aws:bedrock:ap-northeast-3::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0
+
+            # 音声合成。Polly の音声合成は対象を絞る仕組みが無いため "*"
+            - Sid: SynthesizeSpeech
+              Effect: Allow
+              Action: polly:SynthesizeSpeech
+              Resource: "*"
+
+            # 問題: 保存と取得だけ（一覧・削除はしない）
+            - Sid: ReadWriteProblems
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource: !GetAtt ProblemsTable.Arn
+
+            # 回答: 保存だけ
+            - Sid: WriteAttempts
+              Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: !GetAtt AttemptsTable.Arn
+
+            # 作問数のカウンタ: 条件付きの加算だけ。TransactWriteItems には
+            # 専用の権限が無く、中の各操作（ここでは UpdateItem）の権限で判定される
+            - Sid: CountProblems
+              Effect: Allow
+              Action: dynamodb:UpdateItem
+              Resource: !GetAtt CountersTable.Arn
+
+            # 音声: audio/ の下への保存と取得だけ。署名付き URL で配信するときも、
+            # URL に署名したこのロールに GetObject の権限が要る
+            - Sid: ReadWriteAudio
+              Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub ${AudioBucket.Arn}/audio/*
+
+  # ログの保存先。保持期間を決めておかないと無期限に溜まり、少しずつ課金が続く
+  ApiFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-api
+      RetentionInDays: 14
+
 Outputs:
+  ApiUrl:
+    Description: Base URL of the API (append /api/health, /api/problems, ...)
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+
   # ローカル開発ではこの値を環境変数に入れて、同じリソースに接続する
   ProblemsTableName:
     Value: !Ref ProblemsTable
