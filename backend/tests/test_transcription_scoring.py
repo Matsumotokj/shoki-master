@@ -22,6 +22,28 @@ class TestNormalize:
     def test_distinguishes_hiragana_from_katakana(self):
         assert normalize("あい") != normalize("アイ")
 
+    def test_distinguishes_kanji_from_kana(self):
+        # 表記の書き分けも訓練対象
+        assert normalize("皆様") != normalize("皆さま")
+
+    @pytest.mark.parametrize("text", ["15パーセント", "15%", "１５％", "15 パーセント"])
+    def test_percent_notations_are_equivalent(self, text):
+        # 読み上げでは区別できないので、どう書いても同じ扱いにする
+        assert normalize(text) == "15%"
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("1,200名", "1200名"),
+            ("1,200,000円", "1200000円"),
+            ("１，２００名", "1200名"),  # 全角のカンマと数字
+            ("1,2,3", "1,2,3"),  # 3 桁区切りではないカンマは残す
+            ("はい,そうです", "はい,そうです"),
+        ],
+    )
+    def test_thousands_separators_are_ignored(self, text, expected):
+        assert normalize(text) == expected
+
     def test_empty(self):
         assert normalize("") == ""
 
@@ -129,3 +151,16 @@ class TestGradeTranscription:
     def test_diff_is_included(self):
         result = grade_transcription("本日は晴天", "本日わ晴天")
         assert any(s.op == "replace" for s in result.diff)
+
+
+class TestNumberNotation:
+    def test_arabic_numerals_in_different_notation_score_full_marks(self):
+        # 題材が算用数字で書かれていれば、自然な書き取りと一致する
+        gold = "売上高は前年同期比で15パーセント増の1,200億円となりました。"
+        typed = "売上高は前年同期比で15%増の1200億円となりました。"
+        assert grade_transcription(gold, typed).accuracy == 100
+
+    def test_genuine_mishearing_is_still_counted(self):
+        # 表記を揃えても、聞き違い（経常 → 計上）は誤りとして残る
+        result = grade_transcription("月間経常収益は15%増えました。", "月間計上収益は15パーセント増えました。")
+        assert result.distance == 2

@@ -11,18 +11,29 @@ from difflib import SequenceMatcher
 from app.schemas.scoring import DiffSegment, TranscriptionResult
 
 _WHITESPACE = re.compile(r"\s+")
+# 3 桁ごとの区切りのカンマ（1,200 / 1,200,000）。「1,2,3」のような並びは対象外
+_THOUSANDS_SEPARATOR = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
 
 
 def normalize(text: str) -> str:
     """採点前の正規化。
 
-    空白は無視する（聞き取りに空白の概念がないため）が、句読点とカナの種別は
-    区別したままにする（書記として正確に書き分ける訓練であるため）。
-    全角・半角の揺れは NFKC で吸収する。
+    聞いて区別できない違いは同じものとして扱い、聞いて区別できる違いは残す。
+
+    同じとみなすもの:
+    - 空白（聞き取りに空白の概念がない）
+    - 全角と半角（NFKC で揃える。１５％ → 15%）
+    - 「パーセント」と「%」（読み上げは同じ）
+    - 桁区切りのカンマ（1,200 と 1200 は読み上げが同じ）
+
+    区別するもの:
+    - 句読点、ひらがなとカタカナ、漢字とかな（書記として正確に書き分ける訓練であるため）
     """
     if not text:
         return ""
-    return _WHITESPACE.sub("", unicodedata.normalize("NFKC", text))
+    normalized = _WHITESPACE.sub("", unicodedata.normalize("NFKC", text))
+    normalized = normalized.replace("パーセント", "%")
+    return _THOUSANDS_SEPARATOR.sub("", normalized)
 
 
 def levenshtein_distance(gold: str, typed: str) -> int:
