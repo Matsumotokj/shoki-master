@@ -2,7 +2,8 @@
 
 自動テストは課金の発生する外部サービスを呼ばない（要件 N4-4）。
 うっかり実サービスを叩くコードが混ざったときに黙って課金されないよう、
-boto3 のクライアント生成自体をテスト中は失敗させる。
+既定の認証情報で AWS につながる経路（boto3.client / boto3.resource）を
+テスト中は失敗させる。
 """
 
 import boto3
@@ -19,3 +20,4 @@ def forbid_aws_clients(monkeypatch):
         )
 
     monkeypatch.setattr(boto3, "client", _blocked)
+    monkeypatch.setattr(boto3, "resource", _blocked)

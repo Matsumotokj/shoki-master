@@ -1,6 +1,6 @@
 -r requirements.txt
 pytest==9.1.1
-httpx==0.28.1
+httpx2==2.13.1
 uvicorn==0.53.0
 # aws login の一時認証情報を boto3 が読むために必要（Lambda 上では実行ロールを使うので不要）
 botocore[crt]==1.43.100
