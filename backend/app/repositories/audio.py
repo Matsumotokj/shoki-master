@@ -43,9 +43,12 @@ class AudioStorage:
         self._bucket = bucket
         self._client = client or s3_client(region_name)
 
-    def put(self, problem_id: str, audio: bytes) -> str:
-        """音声を保存し、そのキーを返す。"""
-        key = audio_key(problem_id)
+    def put(self, problem_id: str, audio: bytes, key: str | None = None) -> str:
+        """音声を保存し、そのキーを返す。
+
+        既定は audio/ の下（1 日で消える）。サンプル問題は key で samples/ の下を指定する。
+        """
+        key = key or audio_key(problem_id)
         self._client.put_object(
             Bucket=self._bucket,
             Key=key,

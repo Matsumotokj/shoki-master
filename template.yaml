@@ -111,10 +111,14 @@ Resources:
           - ObjectOwnership: BucketOwnerEnforced
       # バージョニングは付けない。使い捨ての音声に旧版は不要で、
       # 有効だと削除のたびに版を 1 つずつ消す必要が出る
+      # 1 日で消すのは作問で生成した audio/ の下だけ。samples/ の下のサンプル問題
+      # （要件 F4）は残す。Lambda には audio/ への書き込みしか許していないので、
+      # それ以外の場所に使い捨ての音声が溜まることはない
       LifecycleConfiguration:
         Rules:
-          - Id: delete-after-1-day
+          - Id: delete-generated-audio-after-1-day
             Status: Enabled
+            Prefix: audio/
             ExpirationInDays: 1
 
   # ---------------------------------------------------------------------------
@@ -221,6 +225,13 @@ Resources:
                 - s3:PutObject
                 - s3:GetObject
               Resource: !Sub ${AudioBucket.Arn}/audio/*
+
+            # サンプル問題の音声: 読み取り（署名付き URL の発行）だけ。
+            # 書き換えられるのは手元の scripts/create_samples.py だけにする
+            - Sid: ReadSampleAudio
+              Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub ${AudioBucket.Arn}/samples/*
 
   # ログの保存先。保持期間を決めておかないと無期限に溜まり、少しずつ課金が続く
   ApiFunctionLogGroup:

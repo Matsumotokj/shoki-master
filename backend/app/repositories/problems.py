@@ -72,21 +72,27 @@ class ProblemRepository:
         text: str,
         sentences: list[Sentence],
         audio_key: str,
+        expires: bool = True,
     ) -> None:
-        self._problems.put_item(
-            Item={
-                "problem_id": problem_id,
-                "mode": mode,
-                "theme": theme,
-                "target_length": target_length,
-                "info": info,
-                "text": text,
-                "sentences": [s.model_dump() for s in sentences],
-                "audio_key": audio_key,
-                "created_at": int(time.time()),
-                "ttl": _expires_at(),
-            }
-        )
+        """問題を保存する。
+
+        expires=False にすると ttl を書かない。DynamoDB は ttl 属性の無い項目を
+        消さないので、サンプル問題のように残しておきたいものに使う。
+        """
+        item = {
+            "problem_id": problem_id,
+            "mode": mode,
+            "theme": theme,
+            "target_length": target_length,
+            "info": info,
+            "text": text,
+            "sentences": [s.model_dump() for s in sentences],
+            "audio_key": audio_key,
+            "created_at": int(time.time()),
+        }
+        if expires:
+            item["ttl"] = _expires_at()
+        self._problems.put_item(Item=item)
 
     def get_problem(self, problem_id: str) -> dict[str, Any] | None:
         """問題を 1 件取り出す。見つからなければ None。

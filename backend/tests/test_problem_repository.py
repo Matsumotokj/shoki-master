@@ -88,6 +88,14 @@ class TestSaveProblem:
         assert item["created_at"] == NOW
         assert item["ttl"] == NOW + config.TTL_SECONDS
 
+    def test_problem_without_expiry_has_no_ttl(self, repo, tables):
+        # ttl 属性の無い項目は DynamoDB が消さない（サンプル問題用）
+        repo.save_problem(
+            problem_id="sample", mode="summary", theme="t", target_length=10, info="",
+            text="本日は晴天です。", sentences=[], audio_key="samples/sample.mp3", expires=False,
+        )
+        assert "ttl" not in tables[0].items[("sample",)]
+
     def test_ttl_is_in_seconds_not_milliseconds(self, repo, tables):
         # ミリ秒で書くと DynamoDB は数万年後の期限と解釈し、消えなくなる
         save_sample(repo)

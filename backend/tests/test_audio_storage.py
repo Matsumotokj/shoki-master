@@ -46,6 +46,13 @@ class TestPut:
             {"Bucket": BUCKET, "Key": "audio/abc123.mp3", "Body": b"mp3", "ContentType": "audio/mpeg"}
         ]
 
+    def test_key_can_be_overridden(self):
+        # サンプル問題は 1 日で消える audio/ ではなく samples/ に置く
+        fake = FakeS3Client()
+        key = AudioStorage(BUCKET, client=fake).put("abc123", b"mp3", key="samples/abc123.mp3")
+        assert key == "samples/abc123.mp3"
+        assert fake.put_calls[0]["Key"] == "samples/abc123.mp3"
+
 
 class TestPresignedUrl:
     def _url(self, session, expires_in=3600):
