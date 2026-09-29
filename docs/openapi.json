@@ -1,0 +1,843 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "書記マスター API",
+    "description": "聞き取り・要約の訓練のための作問と採点",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/problems": {
+      "post": {
+        "tags": [
+          "problems"
+        ],
+        "summary": "作問",
+        "operationId": "create_problem_api_problems_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProblemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "作問数の上限に達した",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageLimitErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "題材の生成に失敗した",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/problems/{problem_id}": {
+      "get": {
+        "tags": [
+          "problems"
+        ],
+        "summary": "問題の再取得",
+        "operationId": "get_problem_api_problems__problem_id__get",
+        "parameters": [
+          {
+            "name": "problem_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$",
+              "description": "問題 ID（16 進 32 文字）",
+              "title": "Problem Id"
+            },
+            "description": "問題 ID（16 進 32 文字）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "問題が無い（1 日経つと消える）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/problems/{problem_id}/answers": {
+      "post": {
+        "tags": [
+          "problems"
+        ],
+        "summary": "採点",
+        "operationId": "submit_answer_api_problems__problem_id__answers_post",
+        "parameters": [
+          {
+            "name": "problem_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$",
+              "description": "問題 ID（16 進 32 文字）",
+              "title": "Problem Id"
+            },
+            "description": "問題 ID（16 進 32 文字）"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitAnswerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "問題が無い",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "要約の採点に失敗した",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/samples": {
+      "get": {
+        "tags": [
+          "samples"
+        ],
+        "summary": "サンプル問題の一覧",
+        "operationId": "list_samples_api_samples_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SampleSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Samples Api Samples Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/usage": {
+      "get": {
+        "tags": [
+          "usage"
+        ],
+        "summary": "作問数の残り",
+        "operationId": "get_usage_api_usage_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "死活確認",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Api Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnswerResponse": {
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "title": "Attempt Id"
+          },
+          "problem_id": {
+            "type": "string",
+            "title": "Problem Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "transcription",
+              "summary"
+            ],
+            "title": "Mode"
+          },
+          "source_text": {
+            "type": "string",
+            "title": "Source Text",
+            "description": "題材の全文（自分の入力と並べて確認するため。要件 F3-3）"
+          },
+          "user_input": {
+            "type": "string",
+            "title": "User Input"
+          },
+          "transcription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SummaryResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "problem_id",
+          "mode",
+          "source_text",
+          "user_input"
+        ],
+        "title": "AnswerResponse",
+        "description": "採点結果。モードに応じて transcription か summary の一方だけが入る。"
+      },
+      "CreateProblemRequest": {
+        "properties": {
+          "theme": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Theme",
+            "description": "何について話すか",
+            "examples": [
+              "IT 企業の株主総会で、社長が四半期の業績を報告する"
+            ]
+          },
+          "target_length": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 50.0,
+            "title": "Target Length",
+            "description": "目標文字数",
+            "default": 300
+          },
+          "info": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Info",
+            "description": "追加の指示（任意）",
+            "default": "",
+            "examples": [
+              "専門用語を少し含める"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "transcription",
+              "summary"
+            ],
+            "title": "Mode",
+            "description": "採点モード",
+            "default": "transcription"
+          }
+        },
+        "type": "object",
+        "required": [
+          "theme"
+        ],
+        "title": "CreateProblemRequest",
+        "description": "作問の依頼（要件 F1-1）。"
+      },
+      "DiffSegment": {
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "equal",
+              "replace",
+              "delete",
+              "insert"
+            ],
+            "title": "Op"
+          },
+          "gold": {
+            "type": "string",
+            "title": "Gold",
+            "default": ""
+          },
+          "typed": {
+            "type": "string",
+            "title": "Typed",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "op"
+        ],
+        "title": "DiffSegment",
+        "description": "正解文と入力文の差分 1 区間。\n\n文字単位ではなく区間単位で返すことで、レスポンスを小さく保つ。\n- equal   : 一致（gold == typed）\n- replace : 書き換え（gold → typed）\n- delete  : 入力側で欠落（typed が空）\n- insert  : 入力側の余分（gold が空）"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ProblemResponse": {
+        "properties": {
+          "problem_id": {
+            "type": "string",
+            "title": "Problem Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "transcription",
+              "summary"
+            ],
+            "title": "Mode"
+          },
+          "theme": {
+            "type": "string",
+            "title": "Theme"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "題材の全文"
+          },
+          "sentences": {
+            "items": {
+              "$ref": "#/components/schemas/Sentence"
+            },
+            "type": "array",
+            "title": "Sentences",
+            "description": "文ごとのテキストと、音声上の開始位置"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms",
+            "description": "音声全体の長さ（ミリ秒）。音声を読み込む前に進行バーを描くため"
+          },
+          "audio_url": {
+            "type": "string",
+            "title": "Audio Url",
+            "description": "音声の署名付き URL。期限が切れたら問題を再取得すると新しい URL が得られる"
+          },
+          "audio_url_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Audio Url Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "problem_id",
+          "mode",
+          "theme",
+          "text",
+          "sentences",
+          "audio_url",
+          "audio_url_expires_at"
+        ],
+        "title": "ProblemResponse",
+        "description": "問題。作問直後と再取得のどちらもこの形で返す。\n\n題材の全文も含める。音声を聞けば分かる情報であり、隠しても訓練上の意味がないため。"
+      },
+      "SampleSummary": {
+        "properties": {
+          "problem_id": {
+            "type": "string",
+            "title": "Problem Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "transcription",
+              "summary"
+            ],
+            "title": "Mode"
+          },
+          "theme": {
+            "type": "string",
+            "title": "Theme"
+          },
+          "char_count": {
+            "type": "integer",
+            "title": "Char Count",
+            "description": "題材の文字数"
+          },
+          "sentence_count": {
+            "type": "integer",
+            "title": "Sentence Count"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms",
+            "description": "音声全体の長さ（ミリ秒）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "problem_id",
+          "mode",
+          "theme",
+          "char_count",
+          "sentence_count"
+        ],
+        "title": "SampleSummary",
+        "description": "サンプル問題の一覧に出す項目。本体は GET /api/problems/{problem_id} で取る。"
+      },
+      "Sentence": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Index",
+            "description": "先頭からの通し番号"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "音声のどのミリ秒から読み始めるか"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "text",
+          "start_ms"
+        ],
+        "title": "Sentence",
+        "description": "題材を構成する 1 文と、その音声上の位置。"
+      },
+      "SubmitAnswerRequest": {
+        "properties": {
+          "user_input": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "User Input",
+            "description": "書き取った文章、または要約"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_input"
+        ],
+        "title": "SubmitAnswerRequest",
+        "description": "回答。どの問題への回答かは URL のパスで示す。"
+      },
+      "SummaryResult": {
+        "properties": {
+          "score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "最終スコア"
+          },
+          "score_raw": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score Raw",
+            "description": "LLM の素点"
+          },
+          "penalty": {
+            "type": "integer",
+            "maximum": 0.0,
+            "title": "Penalty",
+            "description": "長さによる自動減点"
+          },
+          "hallucination": {
+            "type": "boolean",
+            "title": "Hallucination",
+            "description": "元文にない内容の付け足しがあるか"
+          },
+          "subscores": {
+            "$ref": "#/components/schemas/SummarySubscores"
+          },
+          "penalty_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Penalty Reasons"
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes",
+            "description": "採点理由の総評"
+          },
+          "best_summary": {
+            "type": "string",
+            "title": "Best Summary",
+            "description": "模範要約"
+          }
+        },
+        "type": "object",
+        "required": [
+          "score",
+          "score_raw",
+          "penalty",
+          "hallucination",
+          "subscores",
+          "penalty_reasons",
+          "notes",
+          "best_summary"
+        ],
+        "title": "SummaryResult",
+        "description": "要約モードの採点結果。"
+      },
+      "SummarySubscores": {
+        "properties": {
+          "faithfulness": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 0.0,
+            "title": "Faithfulness",
+            "description": "忠実性"
+          },
+          "coverage": {
+            "type": "integer",
+            "maximum": 35.0,
+            "minimum": 0.0,
+            "title": "Coverage",
+            "description": "網羅性"
+          },
+          "clarity": {
+            "type": "integer",
+            "maximum": 15.0,
+            "minimum": 0.0,
+            "title": "Clarity",
+            "description": "明瞭・簡潔"
+          }
+        },
+        "type": "object",
+        "required": [
+          "faithfulness",
+          "coverage",
+          "clarity"
+        ],
+        "title": "SummarySubscores",
+        "description": "要約モードの観点別スコア。"
+      },
+      "TranscriptionResult": {
+        "properties": {
+          "accuracy": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Accuracy",
+            "description": "正答率 (%)"
+          },
+          "distance": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Distance",
+            "description": "編集距離（誤り文字数）"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Length",
+            "description": "正規化後の正解文の文字数"
+          },
+          "diff": {
+            "items": {
+              "$ref": "#/components/schemas/DiffSegment"
+            },
+            "type": "array",
+            "title": "Diff"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accuracy",
+          "distance",
+          "length",
+          "diff"
+        ],
+        "title": "TranscriptionResult",
+        "description": "文字起こしモードの採点結果。"
+      },
+      "UsageCount": {
+        "properties": {
+          "used": {
+            "type": "integer",
+            "title": "Used"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "remaining": {
+            "type": "integer",
+            "title": "Remaining"
+          }
+        },
+        "type": "object",
+        "required": [
+          "used",
+          "limit",
+          "remaining"
+        ],
+        "title": "UsageCount"
+      },
+      "UsageLimitErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "monthly"
+            ],
+            "title": "Scope"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail",
+          "scope",
+          "limit"
+        ],
+        "title": "UsageLimitErrorResponse"
+      },
+      "UsageStatus": {
+        "properties": {
+          "daily": {
+            "$ref": "#/components/schemas/UsageCount"
+          },
+          "monthly": {
+            "$ref": "#/components/schemas/UsageCount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "daily",
+          "monthly"
+        ],
+        "title": "UsageStatus",
+        "description": "作問数の上限と使用数（要件 N2-3）。上限に達してから知るのではなく、先に見せる。"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

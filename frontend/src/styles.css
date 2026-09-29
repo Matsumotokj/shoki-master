@@ -1,0 +1,319 @@
+/* 色・余白・角丸はここで一括管理する。見た目の調整は、まずこの変数を触る */
+:root {
+  --paper: #f6f7f5;
+  --surface: #ffffff;
+  --ink: #1c2530;
+  --muted: #5e6773;
+  --rule: #d8ddd7;
+  --rule-soft: #e9ece8;
+  --accent: #1f4e79; /* 藍。操作ボタン */
+  --accent-soft: #e6eef6;
+  --mark: #c0392b; /* 校正の赤。誤りにだけ使う */
+  --mark-soft: #fbeae7;
+  --ok: #2f6b45;
+  --ok-soft: #e7f1ea;
+  --warn: #8a5a00;
+  --warn-soft: #fbf1dc;
+  --radius: 8px;
+  --font-body: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+  --font-display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.8;
+}
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  margin: 0;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+p {
+  margin: 0;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+}
+a {
+  color: var(--accent);
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- 枠 ---------- */
+.app-header {
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+.app-header .inner {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 12px 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+.brand {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.brand-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+main {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 28px 20px 80px;
+  display: grid;
+  gap: 28px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.label {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.note {
+  font-size: 13px;
+  color: var(--muted);
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.stack {
+  display: grid;
+  gap: 12px;
+}
+
+.chip {
+  display: inline-block;
+  font-size: 12px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.chip.transcription {
+  color: var(--accent);
+}
+.chip.summary {
+  color: var(--ok);
+}
+
+.btn {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 10px 18px;
+  font-weight: 700;
+}
+.btn.ghost {
+  background: var(--surface);
+  color: var(--accent);
+}
+.btn.quiet {
+  border-color: var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 400;
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.banner {
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 14px;
+}
+.banner.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid #ead7a8;
+}
+.banner.error {
+  background: var(--mark-soft);
+  color: var(--mark);
+  border: 1px solid #efc2bb;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--rule);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/* ---------- トップ ---------- */
+.hero {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+.hero h1 {
+  font-size: 28px;
+}
+.hero p {
+  color: var(--muted);
+  max-width: 60ch;
+}
+.samples {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.sample {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.sample h3 {
+  font-size: 17px;
+}
+.sample .meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+.form {
+  display: grid;
+  gap: 18px;
+}
+.field {
+  display: grid;
+  gap: 6px;
+}
+.field > label,
+.field > .field-label {
+  font-weight: 700;
+  font-size: 14px;
+}
+.field .hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+textarea,
+input[type="text"] {
+  font: inherit;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+.length-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.length-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.length-row output {
+  min-width: 5em;
+  text-align: right;
+}
+.modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.mode-opt {
+  position: relative;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: grid;
+  gap: 2px;
+  cursor: pointer;
+  background: var(--surface);
+}
+.mode-opt input {
+  position: absolute;
+  opacity: 0;
+}
+.mode-opt:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.mode-opt:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.mode-opt b {
+  font-size: 14px;
+}
+.mode-opt span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.generating {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  text-align: center;
+  padding: 36px 20px;
+}
+
+@media (max-width: 520px) {
+  .hero h1 {
+    font-size: 23px;
+  }
+}
