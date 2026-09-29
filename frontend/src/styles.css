@@ -160,6 +160,10 @@ main {
   color: var(--ink);
   font-weight: 400;
 }
+a.btn {
+  display: inline-block;
+  text-decoration: none;
+}
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -312,8 +316,362 @@ input[type="text"] {
   padding: 36px 20px;
 }
 
+/* ---------- 練習 ---------- */
+.problem-head {
+  display: grid;
+  gap: 6px;
+}
+.problem-head h2 {
+  font-size: 22px;
+}
+.problem-head .meta {
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.player {
+  display: grid;
+  gap: 16px;
+}
+.timeline {
+  position: relative;
+  height: 34px;
+}
+.track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 14px;
+  height: 6px;
+  background: var(--rule-soft);
+  border-radius: 3px;
+}
+.fill {
+  position: absolute;
+  left: 0;
+  top: 14px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 3px;
+}
+.tick {
+  position: absolute;
+  top: 8px;
+  width: 2px;
+  height: 18px;
+  background: var(--muted);
+  opacity: 0.45;
+}
+.tick.passed {
+  background: var(--accent);
+  opacity: 1;
+}
+.tick-label {
+  position: absolute;
+  top: -6px;
+  font-size: 10px;
+  color: var(--muted);
+  transform: translateX(-50%);
+}
+.head {
+  position: absolute;
+  top: 9px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 3px solid var(--accent);
+  transform: translateX(-50%);
+}
+.timeinfo {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.play {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 20px;
+  display: grid;
+  place-items: center;
+}
+.settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--rule);
+}
+.setting {
+  display: grid;
+  gap: 4px;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.seg button {
+  border: none;
+  background: var(--surface);
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.seg button + button {
+  border-left: 1px solid var(--rule);
+}
+.seg button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.switch input {
+  accent-color: var(--accent);
+  width: 18px;
+  height: 18px;
+}
+.keys {
+  font-size: 12px;
+  color: var(--muted);
+}
+kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 5px;
+  background: var(--surface);
+}
+
+.subtitles {
+  display: grid;
+  gap: 6px;
+}
+.subtitles p {
+  padding: 6px 10px;
+  border-left: 3px solid transparent;
+}
+.subtitles .done {
+  color: var(--muted);
+}
+.subtitles .now {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+.subtitles .later {
+  color: var(--rule);
+  letter-spacing: 0.2em;
+}
+
+.answer {
+  display: grid;
+  gap: 10px;
+}
+/* 罫線のある用紙。行の高さと罫線の間隔をそろえる */
+.ruled {
+  min-height: 220px;
+  line-height: 2.1;
+  padding: 6px 14px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(2.1em - 1px),
+    var(--rule-soft) calc(2.1em - 1px),
+    var(--rule-soft) 2.1em
+  );
+  background-attachment: local;
+  background-position: 0 6px;
+  resize: vertical;
+}
+.answer-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.off-range {
+  color: var(--mark);
+}
+
+/* ---------- 結果 ---------- */
+.score {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.score .big {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 64px;
+  line-height: 1;
+}
+.score .unit {
+  font-size: 20px;
+  margin-left: 2px;
+}
+.score .sub {
+  color: var(--muted);
+  font-size: 14px;
+}
+.tally {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.tally span {
+  font-size: 13px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--mark-soft);
+  color: var(--mark);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* 校正の書き方。赤は誤りにだけ使う */
+.proof {
+  font-size: 16px;
+  line-height: 2.4;
+}
+.rep {
+  color: var(--mark);
+  white-space: nowrap;
+}
+.rep s {
+  color: var(--muted);
+  text-decoration-color: var(--mark);
+  text-decoration-thickness: 2px;
+  margin-right: 2px;
+}
+.rep b {
+  font-weight: 700;
+  border-bottom: 2px solid var(--mark);
+}
+.miss {
+  color: var(--mark);
+  background: var(--mark-soft);
+  border: 1px dashed var(--mark);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+.miss::before {
+  content: "⁁";
+  margin-right: 1px;
+}
+.extra {
+  color: var(--mark);
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+
+details {
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+}
+summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted);
+}
+details p {
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.bars {
+  display: grid;
+  gap: 12px;
+}
+.bar {
+  display: grid;
+  grid-template-columns: 7em 1fr 5em;
+  gap: 12px;
+  align-items: center;
+  font-size: 14px;
+}
+.bar .meter {
+  height: 10px;
+  background: var(--rule-soft);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.bar .meter i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 5px;
+}
+.bar .meter i.low {
+  background: var(--mark);
+}
+.bar .val {
+  text-align: right;
+}
+.compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.compare .card {
+  padding: 16px;
+}
+.compare p {
+  margin-top: 6px;
+  font-size: 14px;
+}
+.flag {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: var(--radius);
+  background: var(--ok-soft);
+  color: var(--ok);
+  display: inline-block;
+}
+.flag.bad {
+  background: var(--mark-soft);
+  color: var(--mark);
+}
+
 @media (max-width: 520px) {
   .hero h1 {
     font-size: 23px;
+  }
+  .score .big {
+    font-size: 52px;
+  }
+  .bar {
+    grid-template-columns: 5.5em 1fr 4em;
   }
 }
