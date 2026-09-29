@@ -59,4 +59,6 @@ class TestListSamples:
         assert response.status_code == 200
         body = response.json()
         assert [b["problem_id"] for b in body] == [s.problem_id for s in samples]
-        assert set(body[0]) == {"problem_id", "mode", "theme"}
+        assert set(body[0]) == {"problem_id", "mode", "theme", "char_count", "sentence_count", "duration_ms"}
+        assert body[0]["char_count"] == len(samples[0].text)
+        assert body[0]["sentence_count"] == len(split_sentences(samples[0].text))

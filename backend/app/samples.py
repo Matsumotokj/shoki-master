@@ -3,6 +3,8 @@
 評価者が待たずに試せるよう、題材と音声を事前に用意しておく問題。
 題材の文章は samples.json に置き、人が確認したものを Git で管理する。
 音声と DynamoDB の項目は scripts/create_samples.py が作る（TTL なし、消えない）。
+その際、音声の長さ（duration_ms）をこのファイルに書き戻す。文章を変えたら
+スクリプトを実行し直すこと（長さが古いままになる）。
 
 API は一覧を返すときに DynamoDB を読まない。サンプルの ID は決まっているので、
 このファイルを読むだけで済み、LLM も音声合成も作問数の上限も使わない。
@@ -24,6 +26,7 @@ class SampleProblem(BaseModel):
     mode: Mode
     theme: str
     text: str
+    duration_ms: int | None = None
 
 
 def sample_audio_key(problem_id: str) -> str:

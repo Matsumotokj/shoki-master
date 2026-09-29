@@ -52,7 +52,7 @@ class FakeSpeech:
         sentences = [
             Sentence(index=i, text=s, start_ms=i * 1000) for i, s in enumerate(split_sentences(text))
         ]
-        return Synthesis(audio=b"mp3", sentences=sentences)
+        return Synthesis(audio=b"mp3", sentences=sentences, duration_ms=len(sentences) * 1000 + 800)
 
 
 class FakeAudio:
@@ -97,6 +97,10 @@ class FakeUsage:
         if self.count >= self.limit:
             raise UsageLimitExceeded("daily", self.limit)
         self.count += 1
+
+    def status(self) -> dict:
+        daily = {"used": self.count, "limit": self.limit, "remaining": max(0, self.limit - self.count)}
+        return {"daily": daily, "monthly": {"used": self.count, "limit": 200, "remaining": 200 - self.count}}
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +149,7 @@ class TestCreateProblem:
         assert body["text"] == SCRIPT
         assert len(body["sentences"]) == 5
         assert body["sentences"][1]["start_ms"] == 1000
+        assert body["duration_ms"] == 5800
         assert body["audio_url"].startswith("https://audio.example/audio/")
         assert "audio_url_expires_at" in body
 
@@ -213,6 +218,7 @@ class TestGetProblem:
         body = response.json()
         assert body["text"] == created["text"]
         assert body["sentences"] == created["sentences"]
+        assert body["duration_ms"] == created["duration_ms"]
 
     def test_issues_a_fresh_audio_url(self, client):
         # 署名付き URL は 1 時間で切れるので、再取得のたびに発行し直す
@@ -353,6 +359,18 @@ class TestStoppedByBudget:
         response = create(client)
         assert response.status_code == 500
         assert "一時停止" not in response.json()["detail"]
+
+
+class TestUsage:
+    def test_reports_remaining_problems(self, client, fakes):
+        create(client)
+        body = client.get("/api/usage").json()
+        assert body["daily"] == {"used": 1, "limit": 100, "remaining": 99}
+        assert body["monthly"]["remaining"] == 199
+
+    def test_does_not_consume_the_limit(self, client, fakes):
+        client.get("/api/usage")
+        assert fakes.usage.count == 0
 
 
 def test_health(client):

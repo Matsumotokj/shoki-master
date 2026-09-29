@@ -210,11 +210,14 @@ Resources:
               Action: dynamodb:PutItem
               Resource: !GetAtt AttemptsTable.Arn
 
-            # 作問数のカウンタ: 条件付きの加算だけ。TransactWriteItems には
-            # 専用の権限が無く、中の各操作（ここでは UpdateItem）の権限で判定される
+            # 作問数のカウンタ: 条件付きの加算と、残りを表示するための読み取り。
+            # TransactWriteItems には専用の権限が無く、中の各操作（ここでは
+            # UpdateItem）の権限で判定される
             - Sid: CountProblems
               Effect: Allow
-              Action: dynamodb:UpdateItem
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
               Resource: !GetAtt CountersTable.Arn
 
             # 音声: audio/ の下への保存と取得だけ。署名付き URL で配信するときも、

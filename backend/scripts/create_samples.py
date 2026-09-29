@@ -11,6 +11,7 @@ Polly を 1 問あたり 2 回呼ぶ（2 問で 1 円未満）。Bedrock は使�
 デプロイしておくこと。でないと samples/ の音声も 1 日で消える。
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -39,8 +40,10 @@ def main() -> None:
     storage = AudioStorage(config.AUDIO_BUCKET, region_name=REGION)
     repo = ProblemRepository(region_name=REGION)
 
+    durations: dict[str, int] = {}
     for sample in load_samples():
         synthesis = speech.synthesize(sample.text)
+        durations[sample.problem_id] = synthesis.duration_ms
         key = storage.put(sample.problem_id, synthesis.audio, key=sample_audio_key(sample.problem_id))
         repo.save_problem(
             problem_id=sample.problem_id,
@@ -51,13 +54,22 @@ def main() -> None:
             text=sample.text,
             sentences=synthesis.sentences,
             audio_key=key,
+            duration_ms=synthesis.duration_ms,
             expires=False,
         )
-        seconds = synthesis.sentences[-1].start_ms / 1000
         print(
             f"{sample.problem_id}  {sample.mode:<13} {len(sample.text):>3} 字 / "
-            f"{len(synthesis.sentences)} 文 / 最終文の開始 {seconds:.1f} 秒  -> s3://{config.AUDIO_BUCKET}/{key}"
+            f"{len(synthesis.sentences)} 文 / {synthesis.duration_ms / 1000:.1f} 秒  -> s3://{config.AUDIO_BUCKET}/{key}"
         )
+
+    # 一覧 API がデータベースを読まずに長さを返せるよう、定義ファイルに書き戻す
+    samples_file = BACKEND_DIR / "app" / "samples.json"
+    definitions = json.loads(samples_file.read_text(encoding="utf-8"))
+    for definition in definitions:
+        definition["duration_ms"] = durations[definition["problem_id"]]
+    text = json.dumps(definitions, ensure_ascii=False, indent=2) + "\n"
+    samples_file.write_text(text, encoding="utf-8")
+    print(f"音声の長さを {samples_file.name} に書き戻しました")
 
 
 if __name__ == "__main__":

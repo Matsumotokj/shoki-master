@@ -12,7 +12,12 @@ from dataclasses import dataclass
 import boto3
 
 from app.schemas.problem import Sentence
-from app.services.script_segmentation import build_ssml, parse_mark_name, split_sentences
+from app.services.script_segmentation import (
+    END_MARK,
+    build_ssml,
+    parse_mark_name,
+    split_sentences,
+)
 
 # 日本語で最も自然なエンジン。Polly の Generative エンジンは ja-JP 非対応。
 ENGINE = "neural"
@@ -28,10 +33,11 @@ SENTENCE_BREAK_MS = 350
 
 @dataclass(frozen=True)
 class Synthesis:
-    """合成結果。音声データそのものと、文ごとの開始位置。"""
+    """合成結果。音声データそのもの、文ごとの開始位置、音声全体の長さ。"""
 
     audio: bytes
     sentences: list[Sentence]
+    duration_ms: int
 
 
 def parse_speech_marks(raw: bytes) -> dict[int, int]:
@@ -50,6 +56,17 @@ def parse_speech_marks(raw: bytes) -> dict[int, int]:
         if index is not None:
             starts[index] = int(mark["time"])
     return starts
+
+
+def parse_end_mark(raw: bytes) -> int | None:
+    """題材の末尾に置いた mark の位置（＝音声全体の長さ）を取り出す。"""
+    for line in raw.decode("utf-8").splitlines():
+        line = line.strip()
+        if line:
+            mark = json.loads(line)
+            if mark.get("value") == END_MARK:
+                return int(mark["time"])
+    return None
 
 
 def build_sentences(texts: list[str], starts: dict[int, int]) -> list[Sentence]:
@@ -92,10 +109,10 @@ class SpeechSynthesizer:
         audio = self._request(ssml, OUTPUT_FORMAT)
         marks = self._request(ssml, "json", speech_mark_types=["ssml"])
 
-        return Synthesis(
-            audio=audio,
-            sentences=build_sentences(texts, parse_speech_marks(marks)),
-        )
+        sentences = build_sentences(texts, parse_speech_marks(marks))
+        # 末尾の mark が返らなかった場合も作問は止めず、最後の文の開始位置で代用する
+        duration_ms = parse_end_mark(marks) or sentences[-1].start_ms
+        return Synthesis(audio=audio, sentences=sentences, duration_ms=duration_ms)
 
     def _request(
         self, ssml: str, output_format: str, speech_mark_types: list[str] | None = None

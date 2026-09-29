@@ -8,6 +8,7 @@ from fastapi import APIRouter
 
 from app.samples import load_samples
 from app.schemas.api import SampleSummary
+from app.services.script_segmentation import split_sentences
 
 router = APIRouter(prefix="/api/samples", tags=["samples"])
 
@@ -15,5 +16,13 @@ router = APIRouter(prefix="/api/samples", tags=["samples"])
 @router.get("", summary="サンプル問題の一覧")
 def list_samples() -> list[SampleSummary]:
     return [
-        SampleSummary(problem_id=s.problem_id, mode=s.mode, theme=s.theme) for s in load_samples()
+        SampleSummary(
+            problem_id=s.problem_id,
+            mode=s.mode,
+            theme=s.theme,
+            char_count=len(s.text),
+            sentence_count=len(split_sentences(s.text)),
+            duration_ms=s.duration_ms,
+        )
+        for s in load_samples()
     ]

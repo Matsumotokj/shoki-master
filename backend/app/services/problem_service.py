@@ -20,6 +20,8 @@ from app.schemas.api import (
     CreateProblemRequest,
     ProblemResponse,
     SubmitAnswerRequest,
+    UsageCount,
+    UsageStatus,
 )
 from app.schemas.problem import Sentence
 from app.services.bedrock import BedrockClient
@@ -99,6 +101,7 @@ class ProblemService:
             text=text,
             sentences=synthesis.sentences,
             audio_key=audio_key,
+            duration_ms=synthesis.duration_ms,
         )
         watch.lap("save")
 
@@ -113,6 +116,7 @@ class ProblemService:
             text=text,
             sentences=synthesis.sentences,
             audio_key=audio_key,
+            duration_ms=synthesis.duration_ms,
         )
 
     # -----------------------------------------------------------------------
@@ -129,6 +133,17 @@ class ProblemService:
             text=item["text"],
             sentences=[Sentence.model_validate(s) for s in item["sentences"]],
             audio_key=item["audio_key"],
+            duration_ms=item.get("duration_ms"),
+        )
+
+    # -----------------------------------------------------------------------
+    # 作問数の残り
+    # -----------------------------------------------------------------------
+
+    def usage_status(self) -> UsageStatus:
+        status = self.usage.status()
+        return UsageStatus(
+            daily=UsageCount(**status["daily"]), monthly=UsageCount(**status["monthly"])
         )
 
     # -----------------------------------------------------------------------
@@ -201,6 +216,7 @@ class ProblemService:
         text: str,
         sentences: list[Sentence],
         audio_key: str,
+        duration_ms: int | None,
     ) -> ProblemResponse:
         expires_in = config.AUDIO_URL_EXPIRES_SECONDS
         return ProblemResponse(
@@ -209,6 +225,7 @@ class ProblemService:
             theme=theme,
             text=text,
             sentences=sentences,
+            duration_ms=duration_ms,
             audio_url=self.audio.presigned_url(audio_key, expires_in=expires_in),
             audio_url_expires_at=datetime.now(UTC) + timedelta(seconds=expires_in),
         )

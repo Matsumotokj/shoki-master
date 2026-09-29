@@ -48,6 +48,9 @@ class ProblemResponse(BaseModel):
     theme: str
     text: str = Field(description="題材の全文")
     sentences: list[Sentence] = Field(description="文ごとのテキストと、音声上の開始位置")
+    duration_ms: int | None = Field(
+        default=None, description="音声全体の長さ（ミリ秒）。音声を読み込む前に進行バーを描くため"
+    )
     audio_url: str = Field(description="音声の署名付き URL。期限が切れたら問題を再取得すると新しい URL が得られる")
     audio_url_expires_at: datetime
 
@@ -88,6 +91,27 @@ class SampleSummary(BaseModel):
     problem_id: str
     mode: Mode
     theme: str
+    char_count: int = Field(description="題材の文字数")
+    sentence_count: int
+    duration_ms: int | None = Field(default=None, description="音声全体の長さ（ミリ秒）")
+
+
+# ---------------------------------------------------------------------------
+# 作問数の残り
+# ---------------------------------------------------------------------------
+
+
+class UsageCount(BaseModel):
+    used: int
+    limit: int
+    remaining: int
+
+
+class UsageStatus(BaseModel):
+    """作問数の上限と使用数（要件 N2-3）。上限に達してから知るのではなく、先に見せる。"""
+
+    daily: UsageCount
+    monthly: UsageCount
 
 
 # ---------------------------------------------------------------------------

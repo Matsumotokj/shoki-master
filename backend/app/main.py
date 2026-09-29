@@ -14,7 +14,7 @@ from mangum import Mangum
 
 from app.logging_config import configure_logging
 from app.repositories.usage import UsageLimitExceeded
-from app.routers import problems, samples
+from app.routers import problems, samples, usage
 from app.services.bedrock import LLMError
 from app.services.problem_service import ProblemNotFound
 
@@ -28,6 +28,7 @@ app = FastAPI(
 )
 app.include_router(problems.router)
 app.include_router(samples.router)
+app.include_router(usage.router)
 
 
 @app.get("/api/health", tags=["health"], summary="死活確認")

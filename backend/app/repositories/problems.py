@@ -72,6 +72,7 @@ class ProblemRepository:
         text: str,
         sentences: list[Sentence],
         audio_key: str,
+        duration_ms: int | None = None,
         expires: bool = True,
     ) -> None:
         """問題を保存する。
@@ -90,6 +91,8 @@ class ProblemRepository:
             "audio_key": audio_key,
             "created_at": int(time.time()),
         }
+        if duration_ms is not None:
+            item["duration_ms"] = duration_ms
         if expires:
             item["ttl"] = _expires_at()
         self._problems.put_item(Item=item)

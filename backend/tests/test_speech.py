@@ -8,6 +8,7 @@ from app.services.speech import (
     ENGINE,
     SpeechSynthesizer,
     build_sentences,
+    parse_end_mark,
     parse_speech_marks,
 )
 
@@ -54,6 +55,19 @@ class TestParseSpeechMarks:
     def test_empty_payload(self):
         assert parse_speech_marks(b"") == {}
 
+    def test_end_mark_is_not_a_sentence(self):
+        raw = speech_marks_payload([("s0", 0), ("end", 5000)])
+        assert parse_speech_marks(raw) == {0: 0}
+
+
+class TestParseEndMark:
+    def test_returns_the_end_position(self):
+        raw = speech_marks_payload([("s0", 0), ("s1", 2000), ("end", 4350)])
+        assert parse_end_mark(raw) == 4350
+
+    def test_missing_end_mark(self):
+        assert parse_end_mark(speech_marks_payload([("s0", 0)])) is None
+
 
 class TestBuildSentences:
     def test_pairs_text_with_start_time(self):
@@ -75,7 +89,10 @@ class TestSpeechSynthesizer:
     def _synthesize(self, text="一つ目です。二つ目です。", **kwargs):
         # Polly は文の数だけ mark を返すので、題材に合わせて用意する
         count = len(split_sentences(text))
-        marks = speech_marks_payload([(f"s{i}", i * 2000) for i in range(count)])
+        entries = [(f"s{i}", i * 2000) for i in range(count)]
+        if kwargs.pop("with_end", True):
+            entries.append(("end", count * 2000))
+        marks = speech_marks_payload(entries)
         client = FakePollyClient(audio=b"AUDIO", marks=marks)
         synthesizer = SpeechSynthesizer(client=client, **kwargs)
         return synthesizer.synthesize(text), client
@@ -85,6 +102,15 @@ class TestSpeechSynthesizer:
         assert result.audio == b"AUDIO"
         assert [s.text for s in result.sentences] == ["一つ目です。", "二つ目です。"]
         assert [s.start_ms for s in result.sentences] == [0, 2000]
+
+    def test_duration_comes_from_the_end_mark(self):
+        result, _ = self._synthesize()
+        assert result.duration_ms == 4000
+
+    def test_duration_falls_back_to_the_last_sentence_start(self):
+        # 末尾の mark が返らなくても作問は止めない
+        result, _ = self._synthesize(with_end=False)
+        assert result.duration_ms == 2000
 
     def test_calls_polly_exactly_twice(self):
         # 文の数に関わらず「音声」と「Speech Marks」の 2 回で済むことが設計の要

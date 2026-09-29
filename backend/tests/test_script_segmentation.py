@@ -139,7 +139,7 @@ class TestBuildSsml:
         from xml.etree import ElementTree
 
         root = ElementTree.fromstring(build_ssml(["一つ目。", "二つ目。"], break_ms=350))
-        assert [m.get("name") for m in root.findall("mark")] == ["s0", "s1"]
+        assert [m.get("name") for m in root.findall("mark")] == ["s0", "s1", "end"]
         assert [b.get("time") for b in root.findall("break")] == ["350ms"]
 
     def test_is_parseable_xml(self):
@@ -148,4 +148,9 @@ class TestBuildSsml:
         ssml = build_ssml(split_sentences("A&B社の件です。「了解。」と伝えました。"))
         root = ElementTree.fromstring(ssml)
         assert root.tag == "speak"
-        assert [m.get("name") for m in root.findall("mark")] == ["s0", "s1"]
+        assert [m.get("name") for m in root.findall("mark")] == ["s0", "s1", "end"]
+
+    def test_end_mark_comes_last(self):
+        # 末尾の mark の位置が音声全体の長さになる
+        ssml = build_ssml(["一つ目。", "二つ目。"], break_ms=350)
+        assert ssml.endswith('<mark name="end"/></speak>')

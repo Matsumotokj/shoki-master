@@ -14,6 +14,9 @@ _CLOSERS = "」』）)】〉》］]"
 # 文ごとの mark 名。Speech Marks の応答と突き合わせるための識別子。
 MARK_PREFIX = "s"
 
+# 題材の末尾に置く mark。その位置が音声全体の長さになる。
+END_MARK = "end"
+
 
 def split_sentences(text: str) -> list[str]:
     """題材を句点（。！？）で文に分割する。
@@ -85,10 +88,15 @@ def build_ssml(sentences: list[str], break_ms: int = 0) -> str:
 
     break_ms を指定すると文の間に明示的な無音を入れる。句点区切りモードで
     文の終わりに停止したとき、余韻が無いまま切れるのを避けるためのもの。
+
+    末尾には END_MARK を置く。Speech Marks でその位置を受け取れば、
+    音声全体の長さが分かる（Polly は長さを直接は返さない）。
     """
     parts: list[str] = []
     for i, sentence in enumerate(sentences):
         if i > 0 and break_ms > 0:
             parts.append(f'<break time="{break_ms}ms"/>')
         parts.append(f'<mark name="{mark_name(i)}"/>{escape(sentence)}')
+    if parts:
+        parts.append(f'<mark name="{END_MARK}"/>')
     return f"<speak>{''.join(parts)}</speak>"

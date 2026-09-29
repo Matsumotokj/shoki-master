@@ -103,6 +103,15 @@ class UsageLimiter:
             }
         }
 
+    def status(self, now: datetime | None = None) -> dict[str, dict[str, int]]:
+        """日次・月次それぞれの使用数・上限・残りを返す（画面に「あと何問」を出すため）。"""
+        used = self.current(now)
+        limits = {"daily": self._daily_limit, "monthly": self._monthly_limit}
+        return {
+            scope: {"used": used[scope], "limit": limits[scope], "remaining": max(0, limits[scope] - used[scope])}
+            for scope in ("daily", "monthly")
+        }
+
     def current(self, now: datetime | None = None) -> dict[str, int]:
         """現在の使用数を返す（表示・確認用）。"""
         daily_id, monthly_id = counter_ids(now)
