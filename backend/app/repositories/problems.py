@@ -101,10 +101,14 @@ class ProblemRepository:
         """問題を 1 件取り出す。見つからなければ None。
 
         TTL で消えた後や、存在しない ID を指定された場合に None が返る。
+        DynamoDB は期限を過ぎた項目をすぐには消さない（数日かかることがある）ので、
+        期限切れの項目もここで None にする。音声は S3 から先に消えているため。
         """
         response = self._problems.get_item(Key={"problem_id": problem_id})
         item = response.get("Item")
-        return _to_plain(item) if item else None
+        if not item or ("ttl" in item and item["ttl"] <= int(time.time())):
+            return None
+        return _to_plain(item)
 
     def save_attempt(
         self, *, problem_id: str, mode: str, user_input: str, result: dict[str, Any]

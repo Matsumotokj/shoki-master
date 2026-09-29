@@ -117,6 +117,25 @@ class TestGetProblem:
     def test_missing_problem_returns_none(self, repo):
         assert repo.get_problem("no-such-id") is None
 
+    def test_expired_problem_returns_none_before_dynamodb_deletes_it(self, repo, monkeypatch):
+        # TTL の削除は遅れることがあり、期限後もしばらく項目が読めてしまう
+        save_sample(repo)
+        monkeypatch.setattr(problems_module.time, "time", lambda: NOW + config.TTL_SECONDS)
+        assert repo.get_problem("p1") is None
+
+    def test_problem_is_readable_just_before_expiry(self, repo, monkeypatch):
+        save_sample(repo)
+        monkeypatch.setattr(problems_module.time, "time", lambda: NOW + config.TTL_SECONDS - 1)
+        assert repo.get_problem("p1") is not None
+
+    def test_problem_without_ttl_never_expires(self, repo, monkeypatch):
+        repo.save_problem(
+            problem_id="sample", mode="summary", theme="t", target_length=10, info="",
+            text="本日は晴天です。", sentences=[], audio_key="samples/sample.mp3", expires=False,
+        )
+        monkeypatch.setattr(problems_module.time, "time", lambda: NOW + 10 * config.TTL_SECONDS)
+        assert repo.get_problem("sample") is not None
+
 
 class TestSaveAttempt:
     def test_stores_under_the_problem_id(self, repo, tables):
