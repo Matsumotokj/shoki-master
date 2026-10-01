@@ -102,7 +102,8 @@ class ProblemRepository:
 
         TTL で消えた後や、存在しない ID を指定された場合に None が返る。
         DynamoDB は期限を過ぎた項目をすぐには消さない（数日かかることがある）ので、
-        期限切れの項目もここで None にする。音声は S3 から先に消えているため。
+        期限切れの項目もここで None にする。音声は S3 のライフサイクルが別の時刻に
+        消すため、期限を過ぎた問題の音声が残っている保証はない。
         """
         response = self._problems.get_item(Key={"problem_id": problem_id})
         item = response.get("Item")
