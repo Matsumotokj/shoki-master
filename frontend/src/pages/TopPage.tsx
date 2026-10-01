@@ -62,7 +62,6 @@ export function TopPage() {
   return (
     <>
       <section className="hero">
-        <h1>録音できない場で、聞いたことを正確に書き残す。</h1>
         <p>生成 AI が話し言葉の題材を作り、読み上げます。書き取った文章や要約は、その場で採点されます。</p>
       </section>
 

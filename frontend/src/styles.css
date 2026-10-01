@@ -90,10 +90,6 @@ a:focus-visible {
   color: var(--ink);
   text-decoration: none;
 }
-.brand-sub {
-  color: var(--muted);
-  font-size: 12px;
-}
 main {
   max-width: 920px;
   margin: 0 auto;
@@ -209,9 +205,6 @@ a.btn {
   display: grid;
   gap: 8px;
   padding-top: 8px;
-}
-.hero h1 {
-  font-size: 28px;
 }
 .hero p {
   color: var(--muted);
@@ -665,9 +658,6 @@ details p {
 }
 
 @media (max-width: 520px) {
-  .hero h1 {
-    font-size: 23px;
-  }
   .score .big {
     font-size: 52px;
   }

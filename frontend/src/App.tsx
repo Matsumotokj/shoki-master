@@ -11,7 +11,6 @@ export function App() {
           <Link to="/" className="brand">
             書記マスター
           </Link>
-          <span className="brand-sub">聞いて、書き取る力の訓練</span>
         </div>
       </header>
       <main>
