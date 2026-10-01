@@ -2,12 +2,13 @@ import pytest
 
 from app.services.bedrock import LLMError
 from app.services.summary_review import (
-    MAX_BEST_SUMMARY_CHARS,
     MAX_NOTES_CHARS,
     MAX_SOURCE_CHARS,
     MAX_SUMMARY_CHARS,
+    best_summary_length,
     review_summary,
 )
+from app.services.summary_scoring import length_penalty
 
 GOOD = {
     "faithfulness": 42,
@@ -85,8 +86,9 @@ class TestResult:
         assert len(result.notes) == MAX_NOTES_CHARS
 
     def test_best_summary_is_capped(self):
+        # 元文 70 字の 60%
         result, _ = review({**GOOD, "best_summary": "要" * 500})
-        assert len(result.best_summary) == MAX_BEST_SUMMARY_CHARS
+        assert len(result.best_summary) == 42
 
     def test_perfect_and_zero_scores_are_valid(self):
         top, _ = review({**GOOD, "faithfulness": 50, "coverage": 35, "clarity": 15})
@@ -125,3 +127,29 @@ class TestInvalidResult:
         key = "faithfulness" if isinstance(expected, int) and expected > 1 else "hallucination"
         result, _ = review({**GOOD, key: raw})
         assert getattr(result, key) == expected
+
+
+class TestBestSummaryLength:
+    """模範要約の長さは元文に合わせる。固定の字数だと、長い元文で利用者に求める長さを下回る。"""
+
+    def test_scales_with_the_source(self):
+        assert best_summary_length(170) == (68, 102)
+        assert best_summary_length(750) == (300, 450)
+
+    def test_model_answer_would_not_be_penalized_for_length(self):
+        # 目安どおりでも上限ぎりぎりでも、模範要約がアプリ自身の長さの規則で減点されない。
+        # 元文は最大 750 字（目標 500 字の 1.5 倍）
+        for source_length in range(20, 751):
+            source = "あ" * source_length
+            target, max_best = best_summary_length(source_length)
+            assert length_penalty(source, "あ" * target) == (0, []), source_length
+            assert length_penalty(source, "あ" * max_best) == (0, []), source_length
+
+    def test_prompt_states_the_length(self):
+        _, llm = review(source="あ" * 299 + "。")
+        assert "120文字前後（180文字以内）" in llm.calls[0]["user"]
+
+    def test_output_budget_covers_the_longest_best_summary(self):
+        # 模範要約が長くなる元文でも、出力が途中で切れない
+        _, llm = review(source="あ" * 749 + "。")
+        assert llm.calls[0]["max_tokens"] == 1000 + 450

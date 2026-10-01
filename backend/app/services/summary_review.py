@@ -6,15 +6,24 @@ LLM には「観点ごとの点数」と「元文にない付け足しの有無�
 内訳と合計が食い違った結果を返さずに済む。
 """
 
+import math
+
 from pydantic import BaseModel, Field, ValidationError
 
 from app.schemas.scoring import SummarySubscores
 from app.services.bedrock import BedrockClient, LLMError
 
 MAX_SOURCE_CHARS = 2000
+# 元文は最大 750 字（目標 500 字の 1.5 倍）なので、800 字を超える要約は元文より長く、
+# 長さの減点（−10）が確定している。それ以上を読ませても採点は変わらず、費用だけが増える。
+# 長さの減点は切る前の全文で計算する（summary_scoring）
 MAX_SUMMARY_CHARS = 800
 MAX_NOTES_CHARS = 200
-MAX_BEST_SUMMARY_CHARS = 120
+
+# 模範要約の長さ。利用者に求める長さ（元文の 25〜60%。summary_scoring）の中ほどにする。
+# 上限は「求める長さ」の上端。文の途中で切れないよう、目安より余裕を持たせる
+BEST_SUMMARY_RATIO = 0.4
+BEST_SUMMARY_MAX_RATIO = 0.6
 
 TOOL_NAME = "submit_review"
 TOOL_DESCRIPTION = "要約の評価結果を提出する"
@@ -49,7 +58,7 @@ INPUT_SCHEMA = {
         },
         "best_summary": {
             "type": "string",
-            "description": f"元文の事実だけに基づく模範要約。{MAX_BEST_SUMMARY_CHARS}文字以内。",
+            "description": "元文の事実だけに基づく模範要約。長さは依頼文の指定に従う。",
         },
     },
     "required": ["faithfulness", "coverage", "clarity", "hallucination", "notes", "best_summary"],
@@ -67,7 +76,7 @@ SYSTEM = f"""あなたは日本語の要約を厳格に評価する採点者で�
 - そこそこ書けていても、忠実性か網羅性に欠けるなら合計70点未満とする。
 
 notes には観点ごとの点数と理由を簡潔に書く（{MAX_NOTES_CHARS}文字以内）。
-best_summary は元文の事実に厳密に従って書く（{MAX_BEST_SUMMARY_CHARS}文字以内、捏造禁止）。"""
+best_summary は元文の事実に厳密に従って書く（長さは依頼文の指定に従う。捏造禁止）。"""
 
 
 class Review(BaseModel):
@@ -92,20 +101,30 @@ class Review(BaseModel):
         return self.faithfulness + self.coverage + self.clarity
 
 
+def best_summary_length(source_length: int) -> tuple[int, int]:
+    """模範要約の (目安の字数, 上限の字数)。"""
+    return round(source_length * BEST_SUMMARY_RATIO), math.floor(source_length * BEST_SUMMARY_MAX_RATIO)
+
+
 def review_summary(client: BedrockClient, *, source_text: str, summary: str) -> Review:
     """要約を評価する。返る値は必ず定義した範囲に収まっている。"""
     source = source_text.strip()[:MAX_SOURCE_CHARS]
     answer = summary.strip()[:MAX_SUMMARY_CHARS]
     if not source or not answer:
         raise ValueError("元文と要約の両方が必要です")
+    target, max_best = best_summary_length(len(source))
 
     raw = client.invoke_tool(
         system=SYSTEM,
-        user=f"# 元文\n{source}\n\n# 要約\n{answer}",
+        user=(
+            f"# 元文\n{source}\n\n# 要約\n{answer}\n\n"
+            f"# 模範要約の長さ\n{target}文字前後（{max_best}文字以内）"
+        ),
         tool_name=TOOL_NAME,
         tool_description=TOOL_DESCRIPTION,
         input_schema=INPUT_SCHEMA,
-        max_tokens=1000,
+        # 日本語は 1 字あたり概ね 1 トークン。点数・講評の分に、模範要約の上限を足す
+        max_tokens=1000 + max_best,
         temperature=0.0,  # 同じ要約には同じ点数がつくようにする
     )
 
@@ -118,6 +137,6 @@ def review_summary(client: BedrockClient, *, source_text: str, summary: str) -> 
     return review.model_copy(
         update={
             "notes": review.notes.strip()[:MAX_NOTES_CHARS],
-            "best_summary": review.best_summary.strip()[:MAX_BEST_SUMMARY_CHARS],
+            "best_summary": review.best_summary.strip()[:max_best],
         }
     )
