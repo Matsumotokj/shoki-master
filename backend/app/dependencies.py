@@ -29,4 +29,12 @@ def get_problem_service() -> ProblemService:
         audio=AudioStorage(config.AUDIO_BUCKET, region_name=config.REGION),
         repo=ProblemRepository(region_name=config.REGION),
         usage=UsageLimiter(region_name=config.REGION),
+        review_usage=UsageLimiter(
+            region_name=config.REGION,
+            daily_limit=config.DAILY_REVIEW_LIMIT,
+            monthly_limit=config.MONTHLY_REVIEW_LIMIT,
+            prefix="reviews",
+            label="要約採点",
+            unit="回",
+        ),
     )

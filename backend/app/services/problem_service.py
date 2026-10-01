@@ -62,6 +62,7 @@ class ProblemService:
     audio: AudioStorage
     repo: ProblemRepository
     usage: UsageLimiter
+    review_usage: UsageLimiter
 
     # -----------------------------------------------------------------------
     # 作問
@@ -155,6 +156,9 @@ class ProblemService:
 
         モードは問題の側に保存されているものを使う。回答者に選ばせると、
         要約の問題を文字起こしとして採点させるといった食い違いが起きる。
+
+        要約の採点は Bedrock を呼ぶ前に回数の上限を消費する（作問と同じく、
+        失敗しても料金は発生しているため）。文字起こしの採点は計算だけなので数えない。
         """
         item = self._load(problem_id)
         source_text: str = item["text"]
@@ -167,6 +171,7 @@ class ProblemService:
             transcription = grade_transcription(source_text, user_input)
             result = transcription.model_dump()
         else:
+            self.review_usage.consume()
             review = review_summary(self.llm, source_text=source_text, summary=user_input)
             summary = finalize_summary_score(
                 source_text=source_text,

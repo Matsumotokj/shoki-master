@@ -570,6 +570,15 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description 要約の採点回数の上限に達した */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageLimitErrorResponse"];
+                };
+            };
             /** @description 要約の採点に失敗した */
             502: {
                 headers: {

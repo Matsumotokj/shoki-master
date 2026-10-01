@@ -58,6 +58,7 @@ def get_problem(problem_id: ProblemId, service: Service) -> ProblemResponse:
     summary="採点",
     responses={
         404: {"model": ErrorResponse, "description": "問題が無い"},
+        429: {"model": UsageLimitErrorResponse, "description": "要約の採点回数の上限に達した"},
         502: {"model": ErrorResponse, "description": "要約の採点に失敗した"},
     },
 )

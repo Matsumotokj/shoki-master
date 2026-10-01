@@ -64,6 +64,41 @@ def test_counter_ids():
     assert counter_ids(DAY1) == ("problems#2026-09-01", "problems#2026-09")
 
 
+def test_counter_ids_with_prefix():
+    assert counter_ids(DAY1, "reviews") == ("reviews#2026-09-01", "reviews#2026-09")
+
+
+class TestSeparateCounters:
+    """作問と要約の採点は、同じテーブルの別々のカウンタで数える。"""
+
+    def reviews(self, client, daily=3, monthly=5):
+        return UsageLimiter(
+            client=client, table_name="counters", daily_limit=daily, monthly_limit=monthly,
+            prefix="reviews", label="要約採点", unit="回",
+        )
+
+    def test_counts_do_not_mix(self, client):
+        limiter(client).consume(DAY1)
+        self.reviews(client).consume(DAY1)
+        self.reviews(client).consume(DAY1)
+        assert limiter(client).current(DAY1) == {"daily": 1, "monthly": 1}
+        assert self.reviews(client).current(DAY1) == {"daily": 2, "monthly": 2}
+
+    def test_reaching_one_limit_does_not_block_the_other(self, client):
+        for _ in range(3):
+            self.reviews(client).consume(DAY1)
+        with pytest.raises(UsageLimitExceeded):
+            self.reviews(client).consume(DAY1)
+        limiter(client).consume(DAY1)  # 作問は止まらない
+
+    def test_message_names_what_was_limited(self, client):
+        for _ in range(3):
+            self.reviews(client).consume(DAY1)
+        with pytest.raises(UsageLimitExceeded) as caught:
+            self.reviews(client).consume(DAY1)
+        assert str(caught.value) == "本日の要約採点上限（3 回）に達しました"
+
+
 class TestConsume:
     def test_counts_up_to_the_daily_limit(self, client):
         lim = limiter(client, daily=3)

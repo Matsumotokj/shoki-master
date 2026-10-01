@@ -1,6 +1,7 @@
-"""作問数の上限（Amazon DynamoDB）。
+"""作問数・要約の採点回数の上限（Amazon DynamoDB）。
 
 要件 N2-3 の費用上限を仕組みで担保する。日次はバースト制限、月次が月額を抑える本体。
+費用のかかる操作（作問、要約の採点）ごとに、別々のカウンタで数える。
 
 「読んで、上限未満なら 1 増やす」を別々に行うと、同時に処理が走ったときに
 どちらも上限未満と判断して両方通ってしまう。DynamoDB の更新は
@@ -22,27 +23,31 @@ from app import config
 
 
 class UsageLimitExceeded(RuntimeError):
-    """作問数が上限に達した。"""
+    """回数が上限に達した。"""
 
-    def __init__(self, scope: str, limit: int):
+    def __init__(self, scope: str, limit: int, label: str = "作問", unit: str = "問"):
         self.scope = scope
         self.limit = limit
         period = "本日" if scope == "daily" else "今月"
-        super().__init__(f"{period}の作問上限（{limit} 問）に達しました")
+        super().__init__(f"{period}の{label}上限（{limit} {unit}）に達しました")
 
 
-def counter_ids(now: datetime | None = None) -> tuple[str, str]:
+def counter_ids(now: datetime | None = None, prefix: str = "problems") -> tuple[str, str]:
     """日次・月次それぞれのカウンタの ID を作る。
 
     日付が変われば ID が変わり、新しいカウンタが 0 から始まる。
     リセット処理を書かなくてよい。
     """
     now = now or datetime.now(UTC)
-    return f"problems#{now:%Y-%m-%d}", f"problems#{now:%Y-%m}"
+    return f"{prefix}#{now:%Y-%m-%d}", f"{prefix}#{now:%Y-%m}"
 
 
 class UsageLimiter:
-    """作問の回数を数え、上限を超える要求を拒む。"""
+    """操作の回数を数え、上限を超える要求を拒む。
+
+    既定は作問。prefix を変えると同じテーブルに別のカウンタを持てる
+    （要約の採点は prefix="reviews"）。
+    """
 
     def __init__(
         self,
@@ -51,19 +56,25 @@ class UsageLimiter:
         region_name: str = config.REGION,
         daily_limit: int = config.DAILY_PROBLEM_LIMIT,
         monthly_limit: int = config.MONTHLY_PROBLEM_LIMIT,
+        prefix: str = "problems",
+        label: str = "作問",
+        unit: str = "問",
     ):
         self._client = client or boto3.client("dynamodb", region_name=region_name)
         self._table = table_name
         self._daily_limit = daily_limit
         self._monthly_limit = monthly_limit
+        self._prefix = prefix
+        self._label = label
+        self._unit = unit
 
     def consume(self, now: datetime | None = None) -> None:
-        """作問 1 回分を計上する。上限を超える場合は UsageLimitExceeded。
+        """1 回分を計上する。上限を超える場合は UsageLimitExceeded。
 
         カウンタ自体にも有効期限を付けておき、古い日付のカウンタが
         際限なく溜まらないようにする。
         """
-        daily_id, monthly_id = counter_ids(now)
+        daily_id, monthly_id = counter_ids(now, self._prefix)
         # 月次カウンタは月をまたいでも残るよう、日次より長く保つ
         expires = int(time.time()) + 70 * 24 * 60 * 60
 
@@ -80,8 +91,11 @@ class UsageLimiter:
             # どちらの条件で弾かれたかは、取り消し理由の並び順で分かる
             reasons = error.response.get("CancellationReasons", [])
             if reasons and reasons[0].get("Code") == "ConditionalCheckFailed":
-                raise UsageLimitExceeded("daily", self._daily_limit) from error
-            raise UsageLimitExceeded("monthly", self._monthly_limit) from error
+                raise self._exceeded("daily", self._daily_limit) from error
+            raise self._exceeded("monthly", self._monthly_limit) from error
+
+    def _exceeded(self, scope: str, limit: int) -> UsageLimitExceeded:
+        return UsageLimitExceeded(scope, limit, label=self._label, unit=self._unit)
 
     def _increment(self, counter_id: str, limit: int, expires: int) -> dict:
         """カウンタを 1 増やす更新。ただし上限未満のときだけ成立する。"""
@@ -114,7 +128,7 @@ class UsageLimiter:
 
     def current(self, now: datetime | None = None) -> dict[str, int]:
         """現在の使用数を返す（表示・確認用）。"""
-        daily_id, monthly_id = counter_ids(now)
+        daily_id, monthly_id = counter_ids(now, self._prefix)
         return {
             "daily": self._read(daily_id),
             "monthly": self._read(monthly_id),

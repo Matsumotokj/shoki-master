@@ -89,13 +89,15 @@ class FakeRepo:
 
 
 class FakeUsage:
-    def __init__(self, limit: int = 100):
+    def __init__(self, limit: int = 100, label: str = "作問", unit: str = "問"):
         self.count = 0
         self.limit = limit
+        self.label = label
+        self.unit = unit
 
     def consume(self) -> None:
         if self.count >= self.limit:
-            raise UsageLimitExceeded("daily", self.limit)
+            raise UsageLimitExceeded("daily", self.limit, label=self.label, unit=self.unit)
         self.count += 1
 
     def status(self) -> dict:
@@ -112,8 +114,14 @@ class Fakes:
         self.audio = FakeAudio()
         self.repo = FakeRepo()
         self.usage = FakeUsage()
+        self.review_usage = FakeUsage(label="要約採点", unit="回")
         self.service = ProblemService(
-            llm=self.llm, speech=FakeSpeech(), audio=self.audio, repo=self.repo, usage=self.usage
+            llm=self.llm,
+            speech=FakeSpeech(),
+            audio=self.audio,
+            repo=self.repo,
+            usage=self.usage,
+            review_usage=self.review_usage,
         )
 
 
@@ -319,6 +327,51 @@ class TestSubmitAnswer:
         response = client.post(f"/api/problems/{problem_id}/answers", json={"user_input": "まとめ"})
         assert response.status_code == 502
         assert fakes.repo.attempts == []
+
+
+class TestReviewLimit:
+    """要約の採点回数の上限。作問を伴わない再挑戦やサンプルでも、Bedrock の料金はかかる。"""
+
+    def answer(self, client, problem_id, text="まとめ" * 10):
+        return client.post(f"/api/problems/{problem_id}/answers", json={"user_input": text})
+
+    def test_each_summary_answer_is_counted(self, client, fakes):
+        problem_id = create(client, mode="summary").json()["problem_id"]
+        self.answer(client, problem_id)
+        self.answer(client, problem_id)
+        assert fakes.review_usage.count == 2
+        # 再挑戦は作問数を消費しない（要件 F3-4）
+        assert fakes.usage.count == 1
+
+    def test_transcription_answers_are_not_counted(self, client, fakes):
+        # 文字起こしの採点は計算だけで、費用がかからない
+        problem_id = create(client, mode="transcription").json()["problem_id"]
+        self.answer(client, problem_id)
+        assert fakes.review_usage.count == 0
+
+    def test_limit_returns_429_without_calling_bedrock(self, client, fakes):
+        problem_id = create(client, mode="summary").json()["problem_id"]
+        fakes.review_usage.limit = 0
+        response = self.answer(client, problem_id)
+        assert response.status_code == 429
+        assert response.json() == {
+            "detail": "本日の要約採点上限（0 回）に達しました",
+            "scope": "daily",
+            "limit": 0,
+        }
+        assert fakes.llm.calls == ["submit_script"]
+        assert fakes.repo.attempts == []
+
+    def test_failed_review_still_counts(self, client, fakes):
+        # 失敗しても Bedrock の料金は発生しているので、上限の歯止めから外さない
+        problem_id = create(client, mode="summary").json()["problem_id"]
+        fakes.llm.error = LLMError("boom")
+        self.answer(client, problem_id)
+        assert fakes.review_usage.count == 1
+
+    def test_unknown_problem_is_not_counted(self, client, fakes):
+        self.answer(client, "0" * 32)
+        assert fakes.review_usage.count == 0
 
 
 # ---------------------------------------------------------------------------
