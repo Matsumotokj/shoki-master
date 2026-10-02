@@ -3,7 +3,7 @@
 # このファイルが AWS 上のリソースの「正」。コンソールや CLI で直接変更しない
 # （変更するとこのファイルと実物が食い違い、次のデプロイで上書きされるか失敗する）。
 #
-# 現段階は保存先と API。配信（CloudFront）は後で足す。
+# 保存先・API・配信（CloudFront）。配信は U12 で 1 段ずつ足している。
 #
 #   sam validate --lint     書式の検査
 #   sam build               Lambda に載せるコードと依存ライブラリをまとめる（.aws-sam/）
@@ -244,6 +244,94 @@ Resources:
       RetentionInDays: 14
 
   # ===========================================================================
+  # 配信: 画面のファイルを CloudFront から届ける
+  #
+  #   ブラウザ → CloudFront → S3（画面のファイル）
+  #
+  # バケットは非公開のまま、CloudFront だけが読めるようにする（OAC）。
+  # 画面の更新は npm run build → S3 にアップロード（index.html は最後）。
+  # ===========================================================================
+
+  # 画面のファイル（Vite のビルド結果 dist/ の中身）を置く場所
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketNamespace: account-regional
+      BucketNamePrefix: !Sub ${AWS::StackName}-frontend
+      # 非公開。読めるのは下のバケットポリシーで許した CloudFront だけ
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+
+  # OAC（Origin Access Control）: CloudFront が S3 へ取りに行くリクエストに署名させる。
+  # S3 はその署名で「どのディストリビューションから来たか」を確かめられる
+  FrontendOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${AWS::StackName}-frontend
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # バケットの読み取りを、このディストリビューションからのリクエストにだけ許す。
+  # 一覧（ListBucket）は許さないので、無いファイルを求められると S3 は 404 ではなく 403 を返す
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${FrontendBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+
+  # ディストリビューション: CloudFront の配信の設定一式
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub ${AWS::StackName} frontend
+        # https://xxxx.cloudfront.net/ を開いたときに返すファイル
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        # 配信に使う拠点の範囲。100 は北米・欧州だけで、日本の拠点が入るのは 200 から
+        PriceClass: PriceClass_200
+        # オリジン: CloudFront が取りに行く先
+        Origins:
+          - Id: frontend
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt FrontendOriginAccessControl.Id
+            # OAC を使うときも、旧方式（OAI）の欄を空にして書く必要がある
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        # ビヘイビア: パスごとの振り分けとキャッシュの規則。
+        # 既定のビヘイビアは、どのパスの規則にも当てはまらないリクエストに使われる
+        DefaultCacheBehavior:
+          TargetOriginId: frontend
+          # http で来たら https に転送する
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          Compress: true
+          # AWS が用意しているキャッシュポリシー「CachingOptimized」。
+          # S3 が返す Cache-Control に従い、無ければ 1 日キャッシュする
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+
+  # ===========================================================================
   # 予算超過時の自動停止（要件 N2-3 の最後の層）
   #
   # 予算の実績が 100% に達すると、Budgets が API の実行ロールに下の
@@ -364,3 +452,12 @@ Outputs:
     Value: !Ref CountersTable
   AudioBucketName:
     Value: !Ref AudioBucket
+
+  # 画面の URL
+  SiteUrl:
+    Value: !Sub https://${Distribution.DomainName}
+  # 画面のファイルのアップロード先と、キャッシュを消すときに指定する ID
+  FrontendBucketName:
+    Value: !Ref FrontendBucket
+  DistributionId:
+    Value: !Ref Distribution
