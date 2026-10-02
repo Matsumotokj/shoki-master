@@ -4,6 +4,7 @@
 Lambda  :  app.main.handler           （Mangum が API Gateway のイベントを変換する）
 """
 
+import hmac
 import logging
 
 from botocore.exceptions import ClientError
@@ -12,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from mangum import Mangum
 
+from app import config
 from app.logging_config import configure_logging
 from app.repositories.usage import UsageLimitExceeded
 from app.routers import problems, samples, usage
@@ -29,6 +31,25 @@ app = FastAPI(
 app.include_router(problems.router)
 app.include_router(samples.router)
 app.include_router(usage.router)
+
+
+@app.middleware("http")
+async def require_cloudfront(request: Request, call_next):
+    """CloudFront を通らずに API Gateway へ直接来たリクエストを拒む（403）。
+
+    API Gateway の HTTP API には、呼び出し元を絞る設定（リソースポリシー）が無い。
+    そこで CloudFront が API へ送るときにだけ合言葉のヘッダを付け、ここで確かめる。
+    これが無いと、CloudFront の Basic 認証を迂回して API Gateway の URL から作問できてしまう。
+    合言葉が設定されていない環境（ローカル開発）では確かめない。
+    """
+    secret = config.ORIGIN_VERIFY_SECRET
+    if secret:
+        received = request.headers.get(config.ORIGIN_VERIFY_HEADER, "")
+        # 一致するまでにかかる時間の差から合言葉を推測されないよう、比べる時間が一定の関数を使う
+        if not hmac.compare_digest(received.encode(), secret.encode()):
+            logger.warning("direct access rejected", extra={"path": request.url.path})
+            return JSONResponse(status_code=403, content={"detail": "直接のアクセスは受け付けていません"})
+    return await call_next(request)
 
 
 @app.get("/api/health", tags=["health"], summary="死活確認")

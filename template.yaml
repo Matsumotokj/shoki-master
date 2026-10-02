@@ -161,6 +161,9 @@ Resources:
           ATTEMPTS_TABLE: !Ref AttemptsTable
           COUNTERS_TABLE: !Ref CountersTable
           AUDIO_BUCKET: !Ref AudioBucket
+          # CloudFront が付ける合言葉と照合する（下の Distribution の api オリジン）。
+          # 値は Parameter Store に手で登録し、ここでは参照するだけ（テンプレートに載せない）
+          ORIGIN_VERIFY_SECRET: !Sub "{{resolve:ssm:/${AWS::StackName}/origin-verify}}"
       # ログの出力先を下で定義したロググループにする。Lambda に自動で作らせると
       # スタックの管理外になり、スタックを消しても残る（インターンの後始末で経験）
       LoggingConfig:
@@ -412,6 +415,12 @@ Resources:
               OriginSSLProtocols: [TLSv1.2]
               # オリジンの応答を待つ時間（既定と同じ 30 秒）。作問は Lambda 側で 29 秒に打ち切る
               OriginReadTimeout: 30
+            # API へ送るリクエストにだけ付ける合言葉。Lambda はこれが無いリクエストを拒む。
+            # API Gateway の HTTP API には呼び出し元を絞る設定が無いため、この方法で
+            # 「CloudFront（Basic 認証）を通ったリクエストだけ」に絞る
+            OriginCustomHeaders:
+              - HeaderName: X-Origin-Verify
+                HeaderValue: !Sub "{{resolve:ssm:/${AWS::StackName}/origin-verify}}"
         # ビヘイビア: パスごとの振り分けとキャッシュの規則。
         # 既定のビヘイビアは、どのパスの規則にも当てはまらないリクエストに使われる
         DefaultCacheBehavior:

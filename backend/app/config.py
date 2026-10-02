@@ -27,3 +27,9 @@ MONTHLY_PROBLEM_LIMIT = int(os.environ.get("MONTHLY_PROBLEM_LIMIT", "200"))
 # サンプル問題では作問を伴わないため、作問数の上限では止まらない。月 600 回で約 300 円
 DAILY_REVIEW_LIMIT = int(os.environ.get("DAILY_REVIEW_LIMIT", "100"))
 MONTHLY_REVIEW_LIMIT = int(os.environ.get("MONTHLY_REVIEW_LIMIT", "600"))
+
+# CloudFront だけが知っている合言葉。CloudFront は API へ送るリクエストにこのヘッダを付け、
+# アプリは一致しないリクエストを拒む（API Gateway の URL を直接呼ばれても動かない）。
+# Lambda では SAM が Parameter Store の値を入れる。ローカル開発では設定しないので確かめない
+ORIGIN_VERIFY_HEADER = "x-origin-verify"
+ORIGIN_VERIFY_SECRET = os.environ.get("ORIGIN_VERIFY_SECRET", "")
