@@ -2,7 +2,7 @@
 
 課金は 1 円未満（DynamoDB の読み書き数十回と、S3 への 1 回の書き込み）。
 書き込んだ題材・回答・音声は TTL とライフサイクルで 1 日後に消える。
-リソースの名前は環境変数で差し替えられる（既定は shoki-master スタックの名前）。
+リソースの名前は shoki-master スタックの Outputs から読む（環境変数で指定すればそちらを優先）。
 
 使い方:
     python scripts/try_storage.py
@@ -13,11 +13,16 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# テーブル名は config.py の既定値が shoki-master スタックの名前と一致している。
-# バケット名はアカウント ID を含むので、ここで補う（sam deploy の Outputs を参照）。
-os.environ.setdefault("AUDIO_BUCKET", "shoki-master-audio-843232832210-ap-northeast-1-an")
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from dev import OUTPUT_TO_ENV, load_stack_outputs  # noqa: E402
+
+# バケット名はアカウント ID を含むので、コードに書かずにスタックから読む（dev.py と同じ）。
+# config.py は読み込み時に環境変数を見るので、app を import する前に設定する
+_outputs = load_stack_outputs("shoki-master")
+for _key, _env in OUTPUT_TO_ENV.items():
+    os.environ.setdefault(_env, _outputs[_key])
 
 import boto3  # noqa: E402
 from boto3.dynamodb.conditions import Key  # noqa: E402
