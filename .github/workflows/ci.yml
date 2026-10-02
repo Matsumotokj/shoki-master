@@ -1,6 +1,6 @@
 # CI: push とプルリクエストのたびに、テスト・型チェック・ビルド・テンプレートの検査を走らせる。
 # AWS には入らない（テストは課金サービスを呼ばない作り。backend/tests/conftest.py）ので、
-# GitHub に AWS の資格情報を渡していない。デプロイは手元で行う
+# GitHub に AWS の資格情報を渡していない。デプロイは手元で scripts/deploy.py から行う
 name: CI
 
 on:
