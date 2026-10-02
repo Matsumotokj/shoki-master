@@ -12,7 +12,8 @@ type Props = {
   onPlayRequest: () => void;
 };
 
-const RATES = [0.8, 1.0, 1.2, 1.5];
+// 書き取りでは 0.8 倍でも速いことがあるので、0.5 倍まで用意する
+const RATES = [0.5, 0.6, 0.7, 0.8, 1.0, 1.2, 1.5];
 export const BACK_SECONDS = 5;
 
 /** 再生の操作。通し再生と句点区切りで、出すボタンが変わる。 */

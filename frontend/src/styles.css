@@ -658,6 +658,10 @@ details p {
 }
 
 @media (max-width: 520px) {
+  /* 速さの 7 段階がスマホの幅に収まるよう、ボタンの左右の余白を詰める */
+  .seg button {
+    padding: 6px 8px;
+  }
   .score .big {
     font-size: 52px;
   }
