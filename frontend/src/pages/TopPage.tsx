@@ -17,6 +17,14 @@ const MODE_DESCRIPTION: Record<Mode, string> = {
   summary: "要点をまとめ、忠実性・網羅性・明瞭さで採点します。",
 };
 
+/** 作問数の残り。取れなければ null（通信自体の失敗も含む）。 */
+function fetchUsage(): Promise<Usage | null> {
+  return api.GET("/api/usage").then(
+    ({ data }) => data ?? null,
+    () => null,
+  );
+}
+
 export function TopPage() {
   const navigate = useNavigate();
   const [samples, setSamples] = useState<Sample[] | null>(null);
@@ -32,8 +40,12 @@ export function TopPage() {
   useEffect(() => {
     // 最初の API 呼び出しで Lambda が起動する（コールドスタート）。サンプルの一覧を
     // 最初に取っておけば、利用者がサンプルを選ぶ頃には起動が済んでいる。
-    void api.GET("/api/samples").then(({ data }) => setSamples(data ?? []));
-    void api.GET("/api/usage").then(({ data }) => setUsage(data ?? null));
+    // 通信自体の失敗（オフラインなど）も、エラーの応答と同じく空の一覧として扱う
+    void api.GET("/api/samples").then(
+      ({ data }) => setSamples(data ?? []),
+      () => setSamples([]),
+    );
+    void fetchUsage().then(setUsage);
   }, []);
 
   const remaining = usage ? Math.min(usage.daily.remaining, usage.monthly.remaining) : null;
@@ -56,7 +68,7 @@ export function TopPage() {
       setError(errorMessage(undefined, undefined));
     }
     setSubmitting(false);
-    void api.GET("/api/usage").then(({ data }) => setUsage(data ?? null));
+    void fetchUsage().then(setUsage);
   }
 
   return (
@@ -69,6 +81,8 @@ export function TopPage() {
         <div className="label">すぐに試す（待ち時間なし）</div>
         {samples === null ? (
           <p className="note">読み込み中…</p>
+        ) : samples.length === 0 ? (
+          <p className="note">サンプル問題を読み込めませんでした。ページを再読み込みしてください</p>
         ) : (
           <div className="samples">
             {samples.map((sample) => (
