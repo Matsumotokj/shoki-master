@@ -319,6 +319,14 @@ Resources:
             # OAC を使うときも、旧方式（OAI）の欄を空にして書く必要がある
             S3OriginConfig:
               OriginAccessIdentity: ""
+          - Id: api
+            # API Gateway のホスト名（https:// は付けない）
+            DomainName: !Sub ${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+              # オリジンの応答を待つ時間（既定と同じ 30 秒）。作問は Lambda 側で 29 秒に打ち切る
+              OriginReadTimeout: 30
         # ビヘイビア: パスごとの振り分けとキャッシュの規則。
         # 既定のビヘイビアは、どのパスの規則にも当てはまらないリクエストに使われる
         DefaultCacheBehavior:
@@ -330,6 +338,24 @@ Resources:
           # AWS が用意しているキャッシュポリシー「CachingOptimized」。
           # S3 が返す Cache-Control に従い、無ければ 1 日キャッシュする
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+        # パスごとのビヘイビア。上から順に照合され、最初に当てはまったものが使われる
+        CacheBehaviors:
+          # API は同じドメインの /api/* として届ける。画面のコードは相手先を知らなくてよく、
+          # 別ドメインへの通信に必要な CORS の設定も要らない
+          - PathPattern: /api/*
+            TargetOriginId: api
+            # 画面は https で開かれるので、http の API 呼び出しは来ない。転送（301）にすると
+            # POST が GET に変わることがあるため、http は拒否する
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            # キャッシュポリシー「CachingDisabled」。API の応答は毎回違う（作問・残り回数）ので、
+            # CloudFront に保存させない
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            # オリジンリクエストポリシー「AllViewerExceptHostHeader」。ブラウザから来たヘッダ・
+            # クエリ・Cookie をそのまま API に渡す。ただし Host は渡さない。API Gateway は
+            # Host（xxxx.execute-api...）で宛先の API を見分けるので、CloudFront の
+            # ドメイン名のまま渡すと届かない
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
 
   # ===========================================================================
   # 予算超過時の自動停止（要件 N2-3 の最後の層）
