@@ -298,18 +298,38 @@ Resources:
               StringEquals:
                 AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}
 
+  # Basic 認証で受け付ける資格情報の置き場（KeyValueStore）。
+  # CloudFront Functions は外部と通信できず DynamoDB などは読めないが、これだけは読める。
+  #
+  # キー: ブラウザが送る Authorization ヘッダ（"Basic " + base64(ID:パスワード)）の SHA-256。
+  #       パスワードそのものはどこにも置かない。scripts/basic_auth_key.py で計算する
+  # 値:   誰に渡した資格情報かのメモ（照合には使わない）
+  #
+  # 中身はこのテンプレートには書かず、デプロイ後に CLI で登録する（リポジトリに載せない）。
+  # 空のままだと誰も入れない（照合に失敗したら拒否する）
+  BasicAuthStore:
+    Type: AWS::CloudFront::KeyValueStore
+    Properties:
+      Name: !Sub ${AWS::StackName}-basic-auth
+      Comment: SHA-256 of accepted Authorization headers. Keys are added with the CLI
+
   # CloudFront Functions: リクエストが CloudFront に届いた直後に動く、短い JavaScript。
   # 通信はできず、1 回 1 ミリ秒未満で終わる処理に限られる代わりに、すべてのリクエストで動かせる。
+  # 画面用と /api/* の両方のビヘイビアに付ける。
   #
-  # ここでは画面の URL（/practice/xxx など）を /index.html に読み替える。画面の切り替えは
-  # ブラウザの中（React Router）で行うので、S3 にはそのパスのファイルが無い。読み替えないと、
-  # 練習画面で再読み込みしたり、URL を直接開いたりしたときに S3 のエラーになる。
-  # 拡張子の付いたファイル（/assets/index-xxx.js など）はそのまま S3 から返す。
+  # 1. Basic 認証: Authorization ヘッダのハッシュが KeyValueStore にあれば通し、無ければ 401。
+  #    401 と一緒に WWW-Authenticate を返すと、ブラウザが自前のログイン画面を出す。
+  #    キャッシュを見る前（viewer-request）に動くので、認証していない人に
+  #    CloudFront のキャッシュから画面のファイルが返ることもない
+  # 2. 画面の URL（/practice/xxx など）を /index.html に読み替える。画面の切り替えは
+  #    ブラウザの中（React Router）で行うので、S3 にはそのパスのファイルが無い。
+  #    拡張子の付いたファイル（/assets/index-xxx.js など）と /api/* はそのまま。
+  #    CloudFront のエラーページの差し替え（404 → index.html）を使わないのは、
+  #    それが API の 404（問題が見つかりません）にも効いてしまうため
   #
-  # CloudFront のエラーページの差し替え（404 → index.html）を使わないのは、それが
-  # API の 404（問題が見つかりません）にも効いてしまうため。
-  #
-  # 関数のコードはテンプレートの「値」なので英語で書く（日本語は sam deploy で ? に化ける）
+  # 1 つのビヘイビアに付けられる viewer-request の関数は 1 つだけなので、両方を 1 つにまとめる。
+  # 関数のコードはテンプレートの「値」なので英語で書く（日本語は sam deploy で ? に化ける）。
+  # !Sub で KeyValueStore の ID を埋め込むので、コードに ${ } を書かない
   SiteRequestFunction:
     Type: AWS::CloudFront::Function
     Properties:
@@ -317,14 +337,47 @@ Resources:
       # 保存と同時に公開（LIVE）する。公開しないとディストリビューションから使えない
       AutoPublish: true
       FunctionConfig:
-        Comment: Rewrite app routes to /index.html
+        Comment: Basic auth and app route rewrite
         Runtime: cloudfront-js-2.0
-      FunctionCode: |
-        function handler(event) {
+        KeyValueStoreAssociations:
+          - KeyValueStoreARN: !GetAtt BasicAuthStore.Arn
+      FunctionCode: !Sub |
+        import cf from 'cloudfront';
+        import crypto from 'crypto';
+
+        const acceptedCredentials = cf.kvs('${BasicAuthStore.Id}');
+
+        const UNAUTHORIZED = {
+          statusCode: 401,
+          statusDescription: 'Unauthorized',
+          headers: {
+            'www-authenticate': { value: 'Basic realm="shoki-master", charset="UTF-8"' },
+          },
+        };
+
+        async function isAuthorized(request) {
+          const header = request.headers.authorization;
+          if (!header) {
+            return false;
+          }
+          const key = crypto.createHash('sha256').update(header.value).digest('hex');
+          try {
+            return await acceptedCredentials.exists(key);
+          } catch (e) {
+            // Fail closed: if the store cannot be read, nobody gets in.
+            return false;
+          }
+        }
+
+        async function handler(event) {
           const request = event.request;
-          const lastSegment = request.uri.split('/').pop();
+          if (!(await isAuthorized(request))) {
+            return UNAUTHORIZED;
+          }
           // App routes such as /practice/{id} have no file extension.
-          if (!lastSegment.includes('.')) {
+          // Files (/assets/...) and API calls (/api/...) pass through unchanged.
+          const lastSegment = request.uri.split('/').pop();
+          if (!request.uri.startsWith('/api/') && !lastSegment.includes('.')) {
             request.uri = '/index.html';
           }
           return request;
@@ -392,6 +445,10 @@ Resources:
             # Host（xxxx.execute-api...）で宛先の API を見分けるので、CloudFront の
             # ドメイン名のまま渡すと届かない
             OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+            # API も Basic 認証で守る。画面だけ守っても、/api/* を直接呼べば作問できてしまう
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt SiteRequestFunction.FunctionARN
 
   # ===========================================================================
   # 予算超過時の自動停止（要件 N2-3 の最後の層）
@@ -523,3 +580,6 @@ Outputs:
     Value: !Ref FrontendBucket
   DistributionId:
     Value: !Ref Distribution
+  # Basic 認証の資格情報を登録するときに指定する
+  BasicAuthStoreArn:
+    Value: !GetAtt BasicAuthStore.Arn
