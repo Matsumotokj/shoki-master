@@ -298,6 +298,38 @@ Resources:
               StringEquals:
                 AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}
 
+  # CloudFront Functions: リクエストが CloudFront に届いた直後に動く、短い JavaScript。
+  # 通信はできず、1 回 1 ミリ秒未満で終わる処理に限られる代わりに、すべてのリクエストで動かせる。
+  #
+  # ここでは画面の URL（/practice/xxx など）を /index.html に読み替える。画面の切り替えは
+  # ブラウザの中（React Router）で行うので、S3 にはそのパスのファイルが無い。読み替えないと、
+  # 練習画面で再読み込みしたり、URL を直接開いたりしたときに S3 のエラーになる。
+  # 拡張子の付いたファイル（/assets/index-xxx.js など）はそのまま S3 から返す。
+  #
+  # CloudFront のエラーページの差し替え（404 → index.html）を使わないのは、それが
+  # API の 404（問題が見つかりません）にも効いてしまうため。
+  #
+  # 関数のコードはテンプレートの「値」なので英語で書く（日本語は sam deploy で ? に化ける）
+  SiteRequestFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${AWS::StackName}-site-request
+      # 保存と同時に公開（LIVE）する。公開しないとディストリビューションから使えない
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Rewrite app routes to /index.html
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          const request = event.request;
+          const lastSegment = request.uri.split('/').pop();
+          // App routes such as /practice/{id} have no file extension.
+          if (!lastSegment.includes('.')) {
+            request.uri = '/index.html';
+          }
+          return request;
+        }
+
   # ディストリビューション: CloudFront の配信の設定一式
   Distribution:
     Type: AWS::CloudFront::Distribution
@@ -338,6 +370,10 @@ Resources:
           # AWS が用意しているキャッシュポリシー「CachingOptimized」。
           # S3 が返す Cache-Control に従い、無ければ 1 日キャッシュする
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          # リクエストが届いた直後（viewer-request）に、下の関数を通す
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SiteRequestFunction.FunctionARN
         # パスごとのビヘイビア。上から順に照合され、最初に当てはまったものが使われる
         CacheBehaviors:
           # API は同じドメインの /api/* として届ける。画面のコードは相手先を知らなくてよく、
