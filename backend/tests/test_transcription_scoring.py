@@ -16,9 +16,10 @@ class TestNormalize:
         assert normalize("ＡＢＣ１２３") == "ABC123"
         assert normalize("ｶﾀｶﾅ") == "カタカナ"
 
-    def test_drops_full_stops_but_keeps_commas(self):
-        # 句点の有無は問わない。読点の位置は書き分けの技能として区別する
-        assert normalize("はい。そうです、確かに。") == "はいそうです、確かに"
+    def test_drops_punctuation(self):
+        # 句読点の有無と位置は問わない（どこで区切るかは書き手によって揺れる）
+        assert normalize("はい。そうです、確かに。") == "はいそうです確かに"
+        assert normalize("はい｡そうです､確かに") == "はいそうです確かに"  # 半角
 
     def test_distinguishes_hiragana_from_katakana(self):
         assert normalize("あい") != normalize("アイ")
@@ -203,8 +204,8 @@ class TestGradeTranscription:
         result = grade_transcription("受付は午後5時までです。窓口は1階です。", "受付は午後五時までです窓口は1階です")
         assert result.accuracy == 100
 
-    def test_missing_commas_are_mistakes(self):
-        assert grade_transcription("はい、そうです", "はいそうです").distance == 1
+    def test_commas_in_different_places_are_not_mistakes(self):
+        assert grade_transcription("はい、そうです。確かに", "はいそうです、確かに").accuracy == 100
 
 
 class TestNumberNotation:

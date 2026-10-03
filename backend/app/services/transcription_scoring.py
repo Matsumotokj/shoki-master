@@ -10,7 +10,8 @@ from difflib import SequenceMatcher
 
 from app.schemas.scoring import DiffSegment, TranscriptionResult
 
-_FULL_STOP = "。"
+# 句読点。半角の「｡」「､」も NFKC でこれになる
+_PUNCTUATION = {"。", "、"}
 _PERCENT = "パーセント"
 _KANJI_DIGITS = {"〇": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
 _SMALL_UNITS = {"十": 10, "百": 100, "千": 1000}
@@ -33,7 +34,7 @@ class Normalized:
     def original(self, start: int, end: int) -> str:
         """text の範囲 [start, end) にあたる、元の文字列の部分。
 
-        正規化で消した文字（空白・句点）は、直前の文字の側に含める。
+        正規化で消した文字（空白・句読点）は、直前の文字の側に含める。
         """
         return self.source[self._boundary(start) : self._boundary(end)]
 
@@ -91,10 +92,10 @@ def normalize_with_source(text: str) -> Normalized:
     - 「パーセント」と「%」（読み上げは同じ）
     - 桁区切りのカンマ（1,200 と 1200 は読み上げが同じ）
     - 漢数字と算用数字（午後五時と午後5時、百二十億と120億は読み上げが同じ）
-    - 句点の有無（文の切れ目は聞き取りの対象にしない）
+    - 句読点の有無（どこで区切るかは書き手によって揺れ、聞き取りの正確さとは別のため）
 
     区別するもの:
-    - 読点、ひらがなとカタカナ、漢字とかな（書記として正確に書き分ける訓練であるため）
+    - ひらがなとカタカナ、漢字とかな（書記として正確に書き分ける訓練であるため）
 
     漢数字は正解と入力の両方で直すので、「一緒」のような言葉も両方で同じく「1緒」になり、
     比べた結果は変わらない（表示には元の文字列を使う）。
@@ -107,7 +108,7 @@ def normalize_with_source(text: str) -> Normalized:
     k = 0
     while k < len(chars):
         char, position = chars[k]
-        if char.isspace() or char == _FULL_STOP:
+        if char.isspace() or char in _PUNCTUATION:
             k += 1
         elif "".join(c for c, _ in chars[k : k + len(_PERCENT)]) == _PERCENT:
             out.append("%")
