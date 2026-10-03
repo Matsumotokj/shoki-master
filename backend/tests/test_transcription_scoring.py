@@ -16,8 +16,9 @@ class TestNormalize:
         assert normalize("ＡＢＣ１２３") == "ABC123"
         assert normalize("ｶﾀｶﾅ") == "カタカナ"
 
-    def test_keeps_punctuation(self):
-        assert normalize("はい。そうです、確かに。") == "はい。そうです、確かに。"
+    def test_drops_full_stops_but_keeps_commas(self):
+        # 句点の有無は問わない。読点の位置は書き分けの技能として区別する
+        assert normalize("はい。そうです、確かに。") == "はいそうです、確かに"
 
     def test_distinguishes_hiragana_from_katakana(self):
         assert normalize("あい") != normalize("アイ")
@@ -46,6 +47,35 @@ class TestNormalize:
 
     def test_empty(self):
         assert normalize("") == ""
+
+
+class TestKanjiNumerals:
+    """漢数字と算用数字は、読み上げが同じなので同じものとして扱う。"""
+
+    @pytest.mark.parametrize(
+        ("kanji", "arabic"),
+        [
+            ("午後五時", "午後5時"),
+            ("三十一日", "31日"),
+            ("十五パーセント", "15%"),
+            ("百二十億円", "120億円"),
+            ("一万二千人", "12,000人"),
+            ("一万二千人", "1万2000人"),
+            ("二〇二六年", "2026年"),
+            ("二千二十六年", "2026年"),
+            ("第二四半期", "第2四半期"),
+        ],
+    )
+    def test_same_number_in_either_notation(self, kanji, arabic):
+        assert normalize(kanji) == normalize(arabic)
+
+    @pytest.mark.parametrize(("a", "b"), [("午後五時", "午後6時"), ("十二", "二十"), ("百二十億円", "12億円")])
+    def test_different_numbers_stay_different(self, a, b):
+        assert normalize(a) != normalize(b)
+
+    def test_words_containing_numerals_still_match(self):
+        # 「一緒」のような言葉も両方で同じく直るので、比べた結果は変わらない
+        assert grade_transcription("一緒に一般の方と", "一緒に一般の方と").accuracy == 100
 
 
 class TestLevenshteinDistance:
@@ -112,13 +142,30 @@ class TestBuildDiff:
         assert "".join(s.gold for s in diff) == gold
         assert "".join(s.typed for s in diff) == typed
 
+    def test_segments_reconstruct_the_original_texts_after_normalization(self):
+        # 比べるのは正規化した文字列だが、各区間には元の文字列を入れる
+        gold = "本日は2026年10月1日、晴天です。"
+        typed = " 本日は 二〇二六年十月一日、曇天です"
+        diff = build_diff(gold, typed)
+        assert "".join(s.gold for s in diff) == gold
+        assert "".join(s.typed for s in diff) == typed
+
+    def test_display_uses_the_original_text(self):
+        # 正規化すると「一緒」は「1緒」になるが、表示は元のまま
+        diff = build_diff("一緒に総務課の山田まで。", "一緒に 総務部の山田まで")
+        assert [(s.op, s.gold, s.typed) for s in diff] == [
+            ("equal", "一緒に総務", "一緒に 総務"),
+            ("replace", "課", "部"),
+            ("equal", "の山田まで。", "の山田まで"),
+        ]
+
 
 class TestGradeTranscription:
     def test_perfect_answer(self):
         result = grade_transcription("本日は晴天なり。", "本日は晴天なり。")
         assert result.accuracy == 100
         assert result.distance == 0
-        assert result.length == 8
+        assert result.length == 7  # 句点は数えない
 
     def test_whitespace_only_difference_is_perfect(self):
         result = grade_transcription("本日は晴天なり。", "本日は 晴天なり。\n")
@@ -136,7 +183,7 @@ class TestGradeTranscription:
     def test_empty_input_scores_zero(self):
         result = grade_transcription("本日は晴天なり。", "")
         assert result.accuracy == 0
-        assert result.distance == 8
+        assert result.distance == 7
 
     def test_excessively_long_input_floors_at_zero(self):
         result = grade_transcription("あい", "あい" + "う" * 100)
@@ -151,6 +198,13 @@ class TestGradeTranscription:
     def test_diff_is_included(self):
         result = grade_transcription("本日は晴天", "本日わ晴天")
         assert any(s.op == "replace" for s in result.diff)
+
+    def test_missing_full_stops_are_not_mistakes(self):
+        result = grade_transcription("受付は午後5時までです。窓口は1階です。", "受付は午後五時までです窓口は1階です")
+        assert result.accuracy == 100
+
+    def test_missing_commas_are_mistakes(self):
+        assert grade_transcription("はい、そうです", "はいそうです").distance == 1
 
 
 class TestNumberNotation:

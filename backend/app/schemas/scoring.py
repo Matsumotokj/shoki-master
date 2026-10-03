@@ -11,7 +11,8 @@ class DiffSegment(BaseModel):
     """正解文と入力文の差分 1 区間。
 
     文字単位ではなく区間単位で返すことで、レスポンスを小さく保つ。
-    - equal   : 一致（gold == typed）
+    比べるのは正規化した文字列だが、gold と typed には元の文字列（表示用）を入れる。
+    - equal   : 一致（正規化すると同じ。「5」と「五」のように見た目が違うこともある）
     - replace : 書き換え（gold → typed）
     - delete  : 入力側で欠落（typed が空）
     - insert  : 入力側の余分（gold が空）
