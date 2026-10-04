@@ -3,7 +3,7 @@
 # このファイルが AWS 上のリソースの「正」。コンソールや CLI で直接変更しない
 # （変更するとこのファイルと実物が食い違い、次のデプロイで上書きされるか失敗する）。
 #
-# 保存先・API・配信（CloudFront）。配信は U12 で 1 段ずつ足している。
+# 保存先・API・配信（CloudFront）。
 #
 #   sam validate --lint     書式の検査
 #   sam build               Lambda に載せるコードと依存ライブラリをまとめる（.aws-sam/）
@@ -165,7 +165,7 @@ Resources:
           # 値は Parameter Store に手で登録し、ここでは参照するだけ（テンプレートに載せない）
           ORIGIN_VERIFY_SECRET: !Sub "{{resolve:ssm:/${AWS::StackName}/origin-verify}}"
       # ログの出力先を下で定義したロググループにする。Lambda に自動で作らせると
-      # スタックの管理外になり、スタックを消しても残る（インターンの後始末で経験）
+      # スタックの管理外になり、スタックを消しても残る
       LoggingConfig:
         LogGroup: !Ref ApiFunctionLogGroup
       Events:
